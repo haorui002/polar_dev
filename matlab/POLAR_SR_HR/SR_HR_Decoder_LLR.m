@@ -1,12 +1,7 @@
-function [dec_out] = SR_HR_Decoder_LLR(N,K, dec_in, WQ_LIST)
-    
-%     if R == 0
-%         K = 1024;
-%         N = 4096;
-%     else
-%         K = 384;
-%     end
-    counter=0;
+function [info_esti, denoised_llr, error, iter_this_time] = SR_HR_Decoder_LLR(N,K, dec_in, WQ_LIST)
+
+
+ counter=0;
     reliability_seq = WQ_LIST(WQ_LIST(:,2)<N,:);
     fzn_indices = reliability_seq(1:end-K, 2) + 1;
 
@@ -15,7 +10,7 @@ function [dec_out] = SR_HR_Decoder_LLR(N,K, dec_in, WQ_LIST)
     idx = 1 : length(idx_fzn);
     code_struct = zeros(length(idx_fzn), 3); % start, end, type
     cnt_struct = 1;
-    [code_struct, ~] = identify_node(idx_fzn, idx, code_struct, cnt_struct);
+    [code_struct, ~] = identify_node(~idx_fzn, idx, code_struct, cnt_struct);
     code_struct = code_struct(code_struct ~= 0);
     code_struct = reshape(code_struct', length(code_struct)/3, 3);
     dec_out = decoder(dec_in, N, K, code_struct, idx_fzn);
@@ -23,345 +18,216 @@ end
 
 function [code_struct, cnt_struct] = identify_node(idx_fzn, idx, code_struct, cnt_struct)
     N = length(idx_fzn);
-% 
-%     if N > 128
-%         [code_struct, cnt_struct] = identify_node(idx_fzn(1 : N/2), idx(1 : N/2) ,code_struct, cnt_struct);
-%         [code_struct, cnt_struct] = identify_node(idx_fzn(N/2 + 1 : end), idx(N/2 + 1 : end),code_struct, cnt_struct);
-%     else
-        if all(idx_fzn(1 : end - 1) == 1) && (idx_fzn(end) == 0)        % Rep节点
-            code_struct(cnt_struct, :) = [idx(1), N, 2];
-            cnt_struct = cnt_struct + 1;
-        elseif (idx_fzn(1) == 1) && all(idx_fzn(2 : end) == 0)          % SPC节点
-            code_struct(cnt_struct, :) = [idx(1), N, 3];
-            cnt_struct = cnt_struct + 1;
-        elseif all(idx_fzn == 0)                                        % Rate-1节点
+    source_len = 16;
+        if is_segment_SR(idx_fzn,source_len)
             code_struct(cnt_struct, :) = [idx(1), N, 1];
             cnt_struct = cnt_struct + 1;
-        elseif all(idx_fzn == 1)                                        % Rate-0节点
-            code_struct(cnt_struct, :) = [idx(1), N, -1];
+        elseif is_segment_HR(idx_fzn,source_len)
+            code_struct(cnt_struct, :) = [idx(1), N, 2];
             cnt_struct = cnt_struct + 1;
-        else
-            if N > 32
-                [code_struct, cnt_struct] = identify_node(idx_fzn(1 : N/2), idx(1 : N/2) ,code_struct, cnt_struct);
-                [code_struct, cnt_struct] = identify_node(idx_fzn(N/2 + 1 : end), idx(N/2 + 1 : end),code_struct, cnt_struct);
-            elseif all(idx_fzn(1 : 2) == 1) && all(idx_fzn(3 : end) == 0)  % type-III节点 且 4 <= N <= 32
-                code_struct(cnt_struct, :) = [idx(1), N, 4];
-                cnt_struct = cnt_struct + 1;
-            elseif N > 4
-                [code_struct, cnt_struct] = identify_node(idx_fzn(1 : N/2), idx(1 : N/2) ,code_struct, cnt_struct);
-                [code_struct, cnt_struct] = identify_node(idx_fzn(N/2 + 1 : end), idx(N/2 + 1 : end),code_struct, cnt_struct);
-            else                                                            % Normal 节点
-                code_struct(cnt_struct, :) = [idx(1), N, 5];
-                cnt_struct = cnt_struct + 1;
-            end
+        elseif N > source_len
+            [code_struct, cnt_struct] = identify_node(idx_fzn(1 : N/2), idx(1 : N/2) ,code_struct, cnt_struct);
+            [code_struct, cnt_struct] = identify_node(idx_fzn(N/2 + 1 : end), idx(N/2 + 1 : end),code_struct, cnt_struct);
+        else                                                           
+            code_struct(cnt_struct, :) = [idx(1), N, 5];
+            cnt_struct = cnt_struct + 1;
         end
-%     end
-    % 基本参数验证
-n = length(arr);
-if n < 4 || bitand(n, n-1) ~= 0
-    error('输入数组长度必须是≥4的2的幂次');
 end
-if ~all(ismember(arr, [0,1]))
-    error('数组只能包含0和1');
+    
+
+function result = is_segment_SR(sequence,source_len)
+
+n = length(sequence);
+segment_start_SR = 1;
+segment_number_SR = 1;
+
+% 存储所有分段信息
+all_segments_SR = {};
+
+% 分段模式的分母序列：2,4,8,16...
+denominator = 2;
+
+while true
+    % 计算当前分段结束位置
+    segment_end_SR = floor(n * (1 - 1/denominator));
+    
+    % 确保分段长度至少为4
+    if (segment_end_SR - segment_start_SR + 1) < source_len
+        fprintf('分段%d (%d-%d) 长度小于4，停止遍历\n', ...
+        segment_number_SR, segment_start_SR, segment_end_SR);
+        all_segments_SR{end+1} = struct('number',segment_number_SR,'start',segment_start_SR,'end',segment_end_SR,'content',sequence(segment_start_SR:segment_end_SR));
+        break;
+    end
+    
+    % 提取当前分段
+    current_segment_SR = sequence(segment_start_SR:segment_end_SR);
+    
+    % 存储分段信息
+    segment_info_SR = struct();
+    segment_info_SR.number = segment_number_SR;
+    segment_info_SR.start = segment_start_SR;
+    segment_info_SR.end = segment_end_SR;
+    segment_info_SR.content = current_segment_SR;
+    all_segments_SR{end+1} = segment_info_SR;
+    
+    % 显示分段信息
+    fprintf('分段%d: 位置[%d-%d], 长度=%d\n', ...
+        segment_number_SR, segment_start_SR, segment_end_SR, length(current_segment_SR));
+    fprintf('  内容: %s\n', mat2str(current_segment_SR));
+    fprintf('  范围: 前%.3f到前%.3f\n\n', ...
+        1 - (segment_start_SR-1)/n, 1 - segment_end_SR/n);
+    
+    % 更新下一个分段的起始位置
+    segment_start_SR = segment_end_SR + 1;
+    segment_number_SR = segment_number_SR + 1;
+    denominator = denominator * 2;
+    
+    % 检查是否到达序列末尾
+    if segment_start_SR > n
+        break;
+    end
 end
 
-result = 1;
-current_pos = 1;
-segment_size = n/2;
+% 执行分段检查（除最后一个分段外）
+result = check_all_segments_SR(all_segments_SR);
+end
 
-fprintf('=== 开始分段验证 ===\n');
-
-while segment_size >= 4
-    % 计算当前段结束位置
-    end_pos = min(current_pos + segment_size - 1, n);
-    current_segment = arr(current_pos:end_pos);
+function result = check_all_segments_SR(all_segments_SR)
+    % 检查除最后一个分段外的所有分段是否全为0或全为1
     
-    % 显示当前段信息（调试用）
-    fprintf('验证段[%d-%d]: ', current_pos, end_pos);
-    disp(current_segment);
-    
-    % 检查模式条件
-    valid_pattern = all(current_segment == 0) || ...
-                  (all(current_segment(1:end-1) == 0) && current_segment(end) == 1);
-    
-    if ~valid_pattern
-        fprintf('模式验证失败\n');
+    if isempty(all_segments_SR)
+        fprintf('没有可检查的分段\n');
         result = 0;
         return;
     end
     
-    % 更新位置和段大小
-    current_pos = end_pos + 1;
-    segment_size = segment_size / 2;
+    fprintf('\n=== 开始分段检查 ===\n');
     
-    % 重置条件
-    if current_pos > n
-        current_pos = 1;
-    end
-end
-
-fprintf('=== 验证通过 ===\n');
-
-end
-
-
-function [dec_out_all] = decoder(llr_in, N, Kr, node_type_structure, idx_fzn)
-    %--------------------------------------------------------------------------
-    % 输入参数：
-    %         llr_in：               信道llr
-    %         node_type_structure：  节点类型矩阵
-    %         frozen_ind：           冻结比特索引
-    % 输出参数：
-    %         dec_out_all：          译码输出比特
-    
-    % %---------------------------- 识别节点类型----------------------------% %
-    T = size(node_type_structure, 1);                            % T代表总的节点个数
-    
-    P = zeros(N - 1, 1);                % LLR internal buffer, exclude input LLR, each column for 1 list
-    C = zeros(N - 1, 2);                % judgment of each stage, 2 columns for left & right node of 1 list, exclude root node
-    u = zeros(1, N);                    % infomation bits buffer, each row for 1 list
-    dec_out_all = zeros(Kr, 1);         % output all decoded bits, for debug
-    n = log2(N);
-
-    % % ----------------------------节点类型参数----------------------------% %
-    % for start_bit_idx = 1 : N
-    for i_node = 1 : T                                     
-        start_bit_idx = node_type_structure(i_node, 1);          % 矩阵第一列代表起始比特的位置 
-        M = node_type_structure(i_node, 2);                      % 矩阵第二列代表子节点长度
-        type = node_type_structure(i_node, 3);                   % 矩阵第三列代表节点类型                             
-    
-        % % ------------------------------参数设置------------------------------% %
-        m = log2(M);                          
-        c_out_idx = M : 2 * M - 1;
-        % % -----------------------------生成矩阵G------------------------------% %
-        G = calGMatric(m); 
-        % % ----------------------------计算f和g函数----------------------------% %
-        dec_idx = start_bit_idx : start_bit_idx + M - 1;
-        c_idx = mod(dec_idx(2^m)/2^m, 2);
-        start_stage = start_stage_calc(start_bit_idx - 1, m, n);
-        p_sum_stage = p_sum_stage_calc(start_bit_idx - 1, m);
-        stage = start_stage;       
-        while(stage ~= m)
-	        num_pe = 2^(stage - 1);						    % number of PEs for one stage
-	        if(stage == n)
-		        p_in_idx = [];							    % row index of P input
-	        else
-		        p_in_idx = 2^stage : 2^(stage + 1) - 1;     % row index of P input
-	        end
-            %% 
-	        p_out_idx = 2^(stage - 1): 2^stage - 1; 	    % row index of P output
-	        c_in_idx = 2^(stage - 1): 2^stage - 1;		    % row index of C input
-    
-            if(stage == start_stage)
-                if(start_bit_idx == 1)                  
-			        P(p_out_idx, 1) = pe(0, num_pe, llr_in, []);                           % first step of bit 0, f-pe
-                elseif(start_bit_idx == N/2 + 1)
-			        P(p_out_idx, 1) = pe(1, num_pe, llr_in, C(c_in_idx, 1));      % first step of bit N/2, g-pe
-                else
-                    % first step of other bits, g-pe, use lazy copy indicator of P buffer, use left node value of C buffer 
-			        P(p_out_idx, 1) = pe(1, num_pe, P(p_in_idx, 1), C(c_in_idx, 1)); 
-                end
-            else
-		        P(p_out_idx, 1) = pe(0, num_pe, P(p_in_idx, 1), []);                  % left steps, f-pe
-            end
-	        stage = stage - 1;
-         end
-        % % --------------------------按节点类型分别译码------------------------% %
-        switch type
-            case -1 % Rate-0
-                for i = 1 : M        
-                    C(c_out_idx(i), 2 - c_idx) = 0;
-                end
-                u(1, dec_idx) = zeros(1, M);
-            case 1 % Rate-1 
-                for i = 1 : M
-                    if P(p_out_idx(i), 1) >= 0
-                        C(c_out_idx(i), 2 - c_idx) = 0;
-                    else
-                        C(c_out_idx(i), 2 - c_idx) = 1;
-                    end
-                end
-                u(1, dec_idx) = mod(C(c_out_idx, 2 - c_idx)'*G, 2);
-             case 2 % Rep
-                sum_llr = 0;
-                    for i = 1 : M                        
-                        llrwidth = 8;
-                        frac = 1;
-%                         P_fix = quantize(P(p_out_idx(i), 1),llrwidth,frac);
-                        sum_llr = sum_llr + P(p_out_idx(i),1);
-                    end
-                        if sum_llr >= 0
-                            C(c_out_idx, 2 - c_idx) = zeros(M, 1);
-                            u(1, dec_idx) = zeros(1, M);
-                        else
-                            C(c_out_idx, 2 - c_idx) = ones(M, 1);
-                            u(1, dec_idx) = mod(C(c_out_idx, 2 - c_idx)'*G, 2); 
-                        end
-            case 3 % SPC
-                llr_code = zeros(M, 1);
-                x = zeros(1, M);
-                sum_x = 0;
-                for i = 1 : M
-                    llr_code(i, 1) = P(p_out_idx(i), 1);               % 对每一个接收信号进行硬判决        
-                    if llr_code(i, 1) >= 0
-                        x(1, i) = 0;
-                    else
-                        x(1, i) = 1;
-                    end                                                % x为硬判决比特序列
-                    sum_x = sum_x + x(1, i);                           % 对硬判决比特序列求和
-                end
-                if mod(sum_x, 2) == 0                                  % 如果模二和为0
-                    C(c_out_idx, 2 - c_idx) = x;                       % 硬判决序列即输出比特
-                    u(1, dec_idx) = mod(C(c_out_idx, 2 - c_idx)'*G, 2);
-                else                        
-                     if mod(sum_x, 2) ~= 0                                 % 如果和不为0
-                        alpha_abs = abs(llr_code);
-                        [~, min_index] = min(alpha_abs);                  % 找到llr绝对值最小的比特位置
-                        x(min_index) = mod(x(min_index) + 1, 2);          % 对该比特进行翻转                     
-                        C(c_out_idx, 2 - c_idx) = x;
-                        u(1, dec_idx) = mod(C(c_out_idx, 2 - c_idx)'*G, 2);
-                     end
-                end
-            case 4 % type-III
-                llr_code_1 = zeros(M/2, 1);
-                llr_code_2 = zeros(M/2, 1);
-                x_1 = zeros(1, M/2);
-                x_2 = zeros(1, M/2);
-                x = zeros(1, M);
-                sum_x1 = 0;
-                sum_x2 = 0;
-                j = 1;
-                for i = 1 : 2 : M - 1
-                    if j <= M/2
-                        llr_code_1(j, 1) = P(p_out_idx(i), 1);                       
-    
-                        if llr_code_1(j, 1) >= 0
-                            x_1(1, j) = 0;
-                        else
-                            x_1(1, j) = 1;
-                        end
-                        sum_x1 = sum_x1 + x_1(1, j);
-                        j = j + 1;
-                    end
-                end
-                if mod(sum_x1, 2) ~= 0
-                    alpha_abs = abs(llr_code_1);
-                    [~, min_index] = min(alpha_abs);
-                    x_1(min_index) = mod(x_1(min_index) + 1, 2);
-                end
-
-                j = 1;
-
-                for i = 2 : 2 : M
-                    if j <= M/2
-                        llr_code_2(j, 1) = P(p_out_idx(i), 1);
-
-                        if llr_code_2(j, 1) >= 0
-                            x_2(1, j) = 0;
-                        else
-                            x_2(1, j) = 1;
-                        end
-                        sum_x2 = sum_x2 + x_2(1, j);
-                        j = j + 1;
-                    end
-                
-                end
-                    if mod(sum_x2, 2) ~= 0
-                        alpha_abs = abs(llr_code_2);
-                        [~, min_index] = min(alpha_abs);
-                        x_2(min_index) = mod(x_2(min_index) + 1, 2);
-                    end
-                
-                for x_idx = 1 : M/2
-                    x(2 * x_idx - 1) = x_1(x_idx);
-                    x(2 * x_idx) = x_2(x_idx);
-                end
-
-                C(c_out_idx, 2 - c_idx) = x;                       
-                u(1, dec_idx) = mod(C(c_out_idx, 2 - c_idx)'*G, 2); 
-            case 5 % Normal
-                for i = 1 : M        
-                    C(c_out_idx(i), 2 - c_idx) = 0;
-                end
-                u(1, dec_idx) = zeros(1, M);
-        end
-                    
-        % % -------------------------------求部分和-----------------------------% %
-        if((c_idx == 0)&&(dec_idx(end) ~= N))                       % calculate partial-sum at right child node
-            u_stage = p_sum_stage;
-            stage = m;
-            while(u_stage ~= 0)
-                phi = (u_stage == 1);                               % left or right indicator of column, left for last step, right for other steps
-                p_sum_in_idx = 2^stage : 2^(stage + 1) - 1;         % row index of partial-sum input
-                p_sum_out_idx = 2^(stage + 1) : 2^(stage + 2) - 1;  % row index of partial-sum output
-                for i = 1 : 2^stage
-                    C(p_sum_out_idx(i), 2 - phi) = mod(C(p_sum_in_idx(i), 1) + C(p_sum_in_idx(i), 2), 2);
-                    C(p_sum_out_idx(i + 2^stage), 2 - phi) = C(p_sum_in_idx(i), 2);
-                end
-                stage = stage + 1;
-                u_stage = u_stage - 1;
-            end  
+    % 检查除最后一个分段外的所有分段
+    for i = 1:length(all_segments_SR)-1
+        segment = all_segments_SR{i};
+        current_segment_SR = segment.content;
+        
+        % 检查是否全为0或全为1
+        boool = all(~current_segment_SR) || ((current_segment_SR(end) == 1) && all(current_segment_SR(1:end-1) == 0));
+        fprintf('检查分段%d [%d-%d]: ', ...
+            segment.number, segment.start, segment.end);
+        
+        if boool
+            fprintf('✓ 满足条件 ');
+        else
+            fprintf('✗ 不满足条件\n');
+            result = 0;
+            return;
         end
     end
+    
+    % 最后一个分段不检查
+    if length(all_segments_SR) > 0
+        last_segment = all_segments_SR{end};
+        fprintf('最后一个分段%d [%d-%d] 跳过检查\n', ...
+            last_segment.number, last_segment.start, last_segment.end);
+    end
+    fprintf('=== 所有分段检查通过 ===\n');
+    result = 1;
+end
 
-    % % ---------------------------提取信息比特-----------------------------% %
-        cnt = 1;
-        for i = 1 : N
-            if(idx_fzn(i) == 0)
-                dec_out_all(cnt, 1) = u(1, i); 
-                cnt = cnt + 1;
-            end
+function result = is_segment_HR(sequence,source_len)
+
+n = length(sequence);
+segment_end_HR = n;
+segment_number_HR = 1;
+
+% 存储所有分段信息
+all_segments_HR = {};
+
+% 分段模式的分母序列：2,4,8,16...
+denominator = 2;
+
+while true
+    % 计算当前分段结束位置
+    segment_start_HR = floor(n * 1/denominator) + 1;
+    
+    % 确保分段长度至少为4
+    if (segment_end_HR - segment_start_HR + 1) < source_len
+        fprintf('分段%d (%d-%d) 长度小于4，停止遍历\n', ...
+        segment_number_HR, segment_start_HR, segment_end_HR);
+        all_segments_HR{end+1} = struct('number',segment_number_HR,'start',segment_start_HR,'end',segment_end_HR,'content',sequence(segment_start_HR:segment_end_HR));
+        break;
+    end
+    
+    % 提取当前分段
+    current_segment_HR = sequence(segment_start_HR:segment_end_HR);
+    
+    % 存储分段信息
+    segment_info_HR = struct();
+    segment_info_HR.number = segment_number_HR;
+    segment_info_HR.start = segment_start_HR;
+    segment_info_HR.end = segment_end_HR;
+    segment_info_HR.content = current_segment_HR;
+    all_segments_HR{end+1} = segment_info_HR;
+    
+    % 显示分段信息
+    fprintf('分段%d: 位置[%d-%d], 长度=%d\n', ...
+        segment_number_HR, segment_start_HR, segment_end_HR, length(current_segment_HR));
+    fprintf('  内容: %s\n', mat2str(current_segment_HR));
+    fprintf('  范围: 前%.3f到前%.3f\n\n', ...
+        1 - (segment_start_HR-1)/n, 1 - segment_end_HR/n);
+    
+    % 更新下一个分段的起始位置
+    segment_end_HR = segment_start_HR - 1;
+    segment_number_HR = segment_number_HR + 1;
+    denominator = denominator * 2;
+    
+    % 检查是否到达序列末尾
+    if segment_end_HR < 1
+        break;
+    end
+end
+
+% 执行分段检查（除最后一个分段外）
+result = check_all_segments_HR(all_segments_HR);
+end
+
+function result = check_all_segments_HR(all_segments_HR)
+    % 检查除最后一个分段外的所有分段是否全为0或全为1
+    
+    if isempty(all_segments_HR)
+        fprintf('没有可检查的分段\n');
+        result = 0;
+        return;
+    end
+    
+    fprintf('\n=== 开始分段检查 ===\n');
+    
+    % 检查除最后一个分段外的所有分段
+    for i = 1:length(all_segments_HR)-1
+        segment = all_segments_HR{i};
+        current_segment_HR = segment.content;
+        
+        % 检查是否全为0或全为1
+        boool = all(current_segment_HR) || ((current_segment_HR(1) == 0) && all(current_segment_HR(2:end) == 1));
+        fprintf('检查分段%d [%d-%d]: ', ...
+            segment.number, segment.start, segment.end);
+        
+        if boool
+            fprintf('✓ 满足条件 ');
+        else
+            fprintf('✗ 不满足条件\n');
+            result = 0;
+            return;
         end
-end
-
-function [start_stage] = start_stage_calc(index, m, n)
-    if index == 0
-        start_stage = n;
-    else
-        batch_id = floor(index / 2^m); % 当前batch编号
-        stage = 0;
-        % 统计最低位连续0个数
-        while bitand(batch_id, 1) == 0 && batch_id ~= 0
-            batch_id = bitshift(batch_id, -1); % 右移一位
-            stage = stage + 1;
-        end
-        start_stage = stage + 1 + m;
     end
-end
-
-function [p_sum_stage] = p_sum_stage_calc(index, m)
-    index_tmp = floor(index / 2^m);
-    p_sum_stage = 0;
     
-    while bitand(index_tmp, 1) % 等价于 mod(index_tmp,2)==1
-        index_tmp = bitshift(index_tmp, -1); % 右移1位
-        p_sum_stage = p_sum_stage + 1;
+    % 最后一个分段不检查
+    if length(all_segments_HR) > 0
+        last_segment = all_segments_HR{end};
+        fprintf('最后一个分段%d [%d-%d] 跳过检查\n', ...
+            last_segment.number, last_segment.start, last_segment.end);
     end
-
+    fprintf('=== 所有分段检查通过 ===\n');
+    result = 1;
 end
-	
-function [llr_out] = pe(f_g, num, llr_in, bit_in)
-    width_llr = 10;
-    frac_llr = 2;
-    
-    % 预分块
-    llr_in = llr_in(:);
-    a = llr_in(1:num);
-    b = llr_in(num+1:end);
-    
-    if f_g == 0
-        % f-PE: min-sum近似
-        llr_out = 0.9375 * sign(a) .* sign(b) .* min(abs(a), abs(b));
-    else
-        % g-PE: 结合译码比特
-        u = bit_in(:); % 保证列向量
-        llr_out = (1 - 2 * u) .* a + b;
-        % 定点量化
-        %llr_out = arrayfun(@(x) quantize(x, width_llr, frac_llr), llr_out); % -512 ~ 511
-    end
-end
-
-
 
 
 

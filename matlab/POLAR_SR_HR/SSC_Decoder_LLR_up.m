@@ -1,4 +1,4 @@
-function [dec_out] = SSC_Decoder_LLR(N,K, dec_in, WQ_LIST)
+function [dec_out,feed] = SSC_Decoder_LLR_up(N,K, dec_in, WQ_LIST)
     
 %     if R == 0
 %         K = 1024;
@@ -47,7 +47,7 @@ function [code_struct, cnt_struct] = identify_node(idx_fzn, idx, code_struct, cn
             elseif all(idx_fzn(1 : 2) == 1) && all(idx_fzn(3 : end) == 0)  % type-III节点 且 4 <= N <= 32
                 code_struct(cnt_struct, :) = [idx(1), N, 4];
                 cnt_struct = cnt_struct + 1;
-            elseif N > 8
+            elseif N > 4
                 [code_struct, cnt_struct] = identify_node(idx_fzn(1 : N/2), idx(1 : N/2) ,code_struct, cnt_struct);
                 [code_struct, cnt_struct] = identify_node(idx_fzn(N/2 + 1 : end), idx(N/2 + 1 : end),code_struct, cnt_struct);
             else                                                            % Normal 节点
@@ -78,8 +78,8 @@ function [dec_out_all] = decoder(llr_in, N, Kr, node_type_structure, idx_fzn)
     n = log2(N);
 
     % % ----------------------------节点类型参数----------------------------% %
-    % for start_bit_idx = 1 : N
-    for i_node = 1 : T                                     
+    for start_bit_idx = 1 : N/2
+%     for i_node = 1 : T                                     
         start_bit_idx = node_type_structure(i_node, 1);          % 矩阵第一列代表起始比特的位置 
         M = node_type_structure(i_node, 2);                      % 矩阵第二列代表子节点长度
         type = node_type_structure(i_node, 3);                   % 矩阵第三列代表节点类型                             
