@@ -13,7 +13,7 @@ K = N*1/2;
 bp_max_iter = 20;
 max_runs = 1e8;
 resolution = 1e5;
-ebno_vec = 1 : 0.5 : 3.5;
+ebno_vec = 7 : -0.5 : 6;
 
 %% 信道仿真
 num_block_err = zeros(length(ebno_vec), 3);
@@ -32,6 +32,7 @@ for i_run = 1 : max_runs
     end
 
 %% 生成源码序列 u
+rng(7);
 info = randi([0 1], K, 1);
 
 %% 码字构造
@@ -45,7 +46,7 @@ info = randi([0 1], K, 1);
 
 %% 三种译码方法
         [info_esti_ssc] = SSC_Decoder_LLR(N, K, llr, WQ_LIST);
-        [info_esti_sr_hr, ~, ~, ~] = SR_HR_Decoder_LLR(N, K, llr, WQ_LIST);
+        [info_esti_sr_hr] = SR_HR_Decoder_LLR(N, K, llr, WQ_LIST);
         [info_esti_bp, ~, ~, ~] = BP_Decoder_LLR(info_bits, frozen_bits, llr', bp_max_iter, M_up, M_down);
 
 

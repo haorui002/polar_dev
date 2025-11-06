@@ -47,7 +47,7 @@ function [code_struct, cnt_struct] = identify_node(idx_fzn, idx, code_struct, cn
             elseif all(idx_fzn(1 : 2) == 1) && all(idx_fzn(3 : end) == 0)  % type-III节点 且 4 <= N <= 32
                 code_struct(cnt_struct, :) = [idx(1), N, 4];
                 cnt_struct = cnt_struct + 1;
-            elseif N > 8
+            elseif N > 4
                 [code_struct, cnt_struct] = identify_node(idx_fzn(1 : N/2), idx(1 : N/2) ,code_struct, cnt_struct);
                 [code_struct, cnt_struct] = identify_node(idx_fzn(N/2 + 1 : end), idx(N/2 + 1 : end),code_struct, cnt_struct);
             else                                                            % Normal 节点
