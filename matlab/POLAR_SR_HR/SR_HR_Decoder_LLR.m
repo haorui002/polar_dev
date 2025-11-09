@@ -96,7 +96,6 @@ end
 end
 
 
-
 function [result,SR_struct_r,type_source] = check_all_segments_SR(all_segments_SR)
     % 检查除最后一个分段外的所有分段是否全为0或全为1
     SR_struct_r = [];
@@ -153,7 +152,7 @@ function [result,SR_struct_r,type_source] = check_all_segments_SR(all_segments_S
     result = 1;
 end
 
-function [result,type_source] = is_segment_HR(sequence,source_len)
+function [result,HR_struct_r,type_source] = is_segment_HR(sequence,source_len)
 
 n = length(sequence);
 segment_end_HR = n;
@@ -207,11 +206,12 @@ while true
 end
 
 % 执行分段检查（除最后一个分段外）
-[result,type_source] = check_all_segments_HR(all_segments_HR);
+[result,HR_struct_r,type_source] = check_all_segments_HR(all_segments_HR);
 end
 
-function [result,type_source] = check_all_segments_HR(all_segments_HR)
+function [result,HR_struct_r,type_source] = check_all_segments_HR(all_segments_HR)
     % 检查除最后一个分段外的所有分段是否全为0或全为1
+    HR_struct_r = [];
     type_source = 0;
 
     if isempty(all_segments_HR)
@@ -232,12 +232,16 @@ function [result,type_source] = check_all_segments_HR(all_segments_HR)
         fprintf('检查分段%d [%d-%d]: ', ...
             segment.number, segment.start, segment.end);
         
-        if boool
-            fprintf('✓ 满足条件 ');
-        else
-            fprintf('✗ 不满足条件\n');
+        if ~boool
             result = 0;
+            HR_struct_r = zeros;
             return;
+        else
+            if all(current_segment_HR)
+                HR_struct_r = [0,HR_struct_r];
+            else
+                HR_struct_r = [1,HR_struct_r];
+            end
         end
     end
     
@@ -542,6 +546,69 @@ function [SR_X] = SR_decode(LLR,SR_struct,type_source,source_len)
     SR_X = [SR_X, vec];
     end
 end
+
+function [HR_X] = HR_decode(LLR,HR_struct,type_source,source_len)
+
+    x_source = zeros(1,source_len);
+    min_idx = [source_len];
+
+    %hard_charge
+    HR_X = LLR < 0 ;
+
+
+    % 计算分段数k
+    k = length(LLR) / source_len;
+    reshaped_LLR = reshape(LLR, source_len, k)';
+    
+
+    %源节点llr,f
+    source_LLR = zeros(1, source_len);
+    for i = 1:source_len
+        current_column = reshaped_LLR(:, i);
+        [min_abs_val, min_idx(i)] = min(abs(current_column));
+        min_idx(i) = (min_idx(i)-1)*source_len + i;
+        sign_product = (-1)^sum(current_column < 0);
+        source_LLR(i) = min_abs_val * sign_product;
+    end
+
+    % decode source
+    switch type_source
+        case -1
+            x_source = zeros(1,source_len);
+        case 1
+            x_source(source_LLR(1,:) < 0) = 1;
+        case 2
+            sum_llr = sum(source_LLR);
+            if sum_llr >= 0
+                x_source = zeros(1,source_len);
+            else
+                x_source = ones(1,source_len);
+            end
+        case 3
+            x_source = spc_decode(source_LLR);
+        case 4
+            odd_LLR = source_LLR(1:2:end);
+            % 偶数位置向量（2,4,6...）
+            even_LLR = source_LLR(2:2:end);
+            % 对奇偶向量分别执行原处理操作
+            odd_result = spc_decode(odd_LLR);
+            even_result = spc_decode(even_LLR);
+            % 合并处理结果（保持原位置顺序）
+            x_source(1:2:end) = odd_result;  % 奇数位置填充奇数向量结果
+            x_source(2:2:end) = even_result;  % 偶数位置填充偶数向量结果
+    end
+
+    %P-PC flip
+    for i = 1:source_len
+        if (source_LLR(i)<0) ~= x_source(i)
+            HR_X(min_idx(i)) = 1 - HR_X(min_idx(i));
+        end
+    end
+
+    %S-PC filp
+
+end
+
 
 function C = kroneckerSumSequence(A)
     % 输入：0/1序列A

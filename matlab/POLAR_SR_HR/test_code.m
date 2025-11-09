@@ -1,8 +1,8 @@
 % 
-% % 示例输入向量（仅包含0和1）
-% LLR = randi([-5,5],1,32);
-% v = [1, 0,1];  % 可替换为任意0-1向量
-% 
+% 示例输入向量（仅包含0和1）
+LLR = randi([-5,5],1,32);
+v = [1, 0,1];  % 可替换为任意0-1向量
+
 % % 找出值为1的位置
 % ones_pos = find(v == 1);
 % k = length(ones_pos);  % 1的个数
@@ -26,18 +26,20 @@
 % 
 % 
 % 
+source_LLR = HR_decode(LLR,v,0,4)
 % % 显示结果
 % disp('所有可能的序列：');
 % disp(sequences);
 % disp('所有path：');
 % disp(SR_path);
-% disp('LLR:');
-% disp(LLR);
-% disp('源节点LLR：');
-% disp(source_LLR);
+disp('LLR:');
+disp(LLR);
+disp('源节点LLR：');
+disp(source_LLR);
 % disp('绝对值之和最大的行是：');
 % disp(result);
-% 
+
+
 % function C = kroneckerSumSequence(A)
 %     % 输入：0/1序列A
 %     % 输出：所有二元组依次做克罗内克和的结果C
@@ -146,30 +148,30 @@
 %     sub_result = step1;
 % end
 
-% 示例测试
-A = [1,0,1,0];
-B = [0,1,1,0];
-output = combineVectors(A, B);
-disp(output);  % 一行输出：1  2  3  4  -1  -2  -3  -4  -1  -2  -3  -4  1  2  3  4
-function result = combineVectors(A, B)
-    % 检查输入合法性
-    if length(A) ~= length(B) || ~all(B == 0 | B == 1)
-        error('A与B长度必须相同，且B元素只能为0或1');
-    end
-    % 生成系数（0→1，1→-1），通过广播生成矩阵后按列拼接为行向量
-    result=[];
-    % 按B的每个元素生成对应A或-A，再按列拼接为行向量
-    for i = 1:length(B)
-        % 根据B(i)选择A或-A，转换为字符串后拼接
-        if B(i) == 0
-            vec = xor(A,zeros(1,length(B)));
-        else
-            vec = xor(A,ones(1,length(B)));
-        end
-        % 将当前向量的元素转换为字符串并拼接（无分隔符）
-        result = [result, vec];
-    end
-end
+% % 示例测试
+% A = [1,0,1,0];
+% B = [0,1,1,0];
+% output = combineVectors(A, B);
+% disp(output);  % 一行输出：1  2  3  4  -1  -2  -3  -4  -1  -2  -3  -4  1  2  3  4
+% function result = combineVectors(A, B)
+%     % 检查输入合法性
+%     if length(A) ~= length(B) || ~all(B == 0 | B == 1)
+%         error('A与B长度必须相同，且B元素只能为0或1');
+%     end
+%     % 生成系数（0→1，1→-1），通过广播生成矩阵后按列拼接为行向量
+%     result=[];
+%     % 按B的每个元素生成对应A或-A，再按列拼接为行向量
+%     for i = 1:length(B)
+%         % 根据B(i)选择A或-A，转换为字符串后拼接
+%         if B(i) == 0
+%             vec = xor(A,zeros(1,length(B)));
+%         else
+%             vec = xor(A,ones(1,length(B)));
+%         end
+%         % 将当前向量的元素转换为字符串并拼接（无分隔符）
+%         result = [result, vec];
+%     end
+% end
 
 
 % function [SR_X] = SR_decode(LLR,SR_struct,type_source,source_len)
@@ -239,3 +241,39 @@ end
 % end
 % 
 
+function [source_LLR] = HR_decode(LLR,HR_struct,type_source,source_len)
+% SEQUENCE_PROCESSOR 处理输入序列并生成输出序列
+% 输入参数：
+%   m - 输入序列（向量）
+%   a - 输出序列长度
+% 输出参数：
+%   output_seq - 处理后的输出序列
+
+    % 计算分段数k
+    k = length(LLR) / source_len;
+     HR_X = LLR < 0;
+     min_idx = [source_len];
+
+    % 将序列m重塑为k行a列的矩阵
+    % 每列对应输出序列的一个位置
+    reshaped_LLR = reshape(LLR, source_len, k)';
+    
+    % 初始化输出序列
+    source_LLR = zeros(1, source_len);
+    
+    % 遍历输出序列的每个位置
+    for i = 1:source_len
+        % 获取当前列的所有元素
+        current_column = reshaped_LLR(:, i);
+        
+        % 计算绝对值最小值
+        [min_abs_val, min_idx(i)] = min(abs(current_column));
+        min_idx(i) = (min_idx(i)-1)*source_len + i;
+        % 计算符号乘积
+        sign_product = (-1)^sum(current_column < 0);
+        
+        % 设置输出值：绝对值最小值乘以符号乘积
+        source_LLR(i) = min_abs_val * sign_product;
+    end
+
+end
