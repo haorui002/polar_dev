@@ -17,7 +17,8 @@ function [dec_out] = SR_HR_Decoder_LLR(N,K, dec_in, WQ_LIST)
     code_struct = code_struct(code_struct ~= 0);
     code_struct = reshape(code_struct', length(code_struct)/4, 4);
     SR_struct = SR_struct';
-    dec_out = decoder(dec_in, N, K, code_struct, idx_fzn,SR_struct,source_len);
+    HR_struct = HR_struct';
+    dec_out = decoder(dec_in, N, K, code_struct, idx_fzn,SR_struct,HR_struct,source_len);
 end
 
 function [SR_struct, HR_struct, code_struct, cnt_struct] = identify_node(idx_fzn, idx, code_struct, cnt_struct,SR_struct, HR_struct,source_len)
@@ -27,7 +28,7 @@ function [SR_struct, HR_struct, code_struct, cnt_struct] = identify_node(idx_fzn
             code_struct(cnt_struct, :) = [idx(1), N, 1,type_source];
             cnt_struct = cnt_struct + 1;
         elseif is_segment_HR(idx_fzn,source_len)
-            [~,type_source] = is_segment_HR(idx_fzn,source_len);
+            [~,HR_struct{cnt_struct},type_source] = is_segment_HR(idx_fzn,source_len);
             code_struct(cnt_struct, :) = [idx(1), N, 2,type_source];
             cnt_struct = cnt_struct + 1;
         elseif N > source_len
@@ -73,12 +74,12 @@ while true
     segment_info_SR.content = current_segment_SR;
     all_segments_SR{end+1} = segment_info_SR;
     
-    % 显示分段信息
-    fprintf('分段%d: 位置[%d-%d], 长度=%d\n', ...
-        segment_number_SR, segment_start_SR, segment_end_SR, length(current_segment_SR));
-    fprintf('  内容: %s\n', mat2str(current_segment_SR));
-    fprintf('  范围: 前%.3f到前%.3f\n\n', ...
-        1 - (segment_start_SR-1)/n, 1 - segment_end_SR/n);
+%     % 显示分段信息
+%     fprintf('分段%d: 位置[%d-%d], 长度=%d\n', ...
+%         segment_number_SR, segment_start_SR, segment_end_SR, length(current_segment_SR));
+%     fprintf('  内容: %s\n', mat2str(current_segment_SR));
+%     fprintf('  范围: 前%.3f到前%.3f\n\n', ...
+%         1 - (segment_start_SR-1)/n, 1 - segment_end_SR/n);
     
     % 更新下一个分段的起始位置
     segment_start_SR = segment_end_SR + 1;
@@ -95,13 +96,12 @@ end
 
 end
 
-
 function [result,SR_struct_r,type_source] = check_all_segments_SR(all_segments_SR)
     % 检查除最后一个分段外的所有分段是否全为0或全为1
     SR_struct_r = [];
     type_source = 0 ;
     if isempty(all_segments_SR)
-        fprintf('没有可检查的分段\n');
+%         fprintf('没有可检查的分段\n');
         result = 0;
         return;
     end
@@ -170,8 +170,8 @@ while true
     
     % 确保分段长度至少为4
     if (segment_end_HR - segment_start_HR + 1) < source_len
-        fprintf('分段%d (%d-%d) 长度小于4，停止遍历\n', ...
-        segment_number_HR, segment_start_HR, segment_end_HR);
+%         fprintf('分段%d (%d-%d) 长度小于4，停止遍历\n', ...
+%         segment_number_HR, segment_start_HR, segment_end_HR);
         all_segments_HR{end+1} = struct('number',segment_number_HR,'start',segment_start_HR,'end',segment_end_HR,'content',sequence(segment_end_HR-source_len+1:segment_end_HR));
         break;
     end
@@ -187,12 +187,12 @@ while true
     segment_info_HR.content = current_segment_HR;
     all_segments_HR{end+1} = segment_info_HR;
     
-    % 显示分段信息
-    fprintf('分段%d: 位置[%d-%d], 长度=%d\n', ...
-        segment_number_HR, segment_start_HR, segment_end_HR, length(current_segment_HR));
-    fprintf('  内容: %s\n', mat2str(current_segment_HR));
-    fprintf('  范围: 前%.3f到前%.3f\n\n', ...
-        1 - (segment_start_HR-1)/n, 1 - segment_end_HR/n);
+%     % 显示分段信息
+%     fprintf('分段%d: 位置[%d-%d], 长度=%d\n', ...
+%         segment_number_HR, segment_start_HR, segment_end_HR, length(current_segment_HR));
+%     fprintf('  内容: %s\n', mat2str(current_segment_HR));
+%     fprintf('  范围: 前%.3f到前%.3f\n\n', ...
+%         1 - (segment_start_HR-1)/n, 1 - segment_end_HR/n);
     
     % 更新下一个分段的起始位置
     segment_end_HR = segment_start_HR - 1;
@@ -205,8 +205,8 @@ while true
     end
 end
 
-% 执行分段检查（除最后一个分段外）
 [result,HR_struct_r,type_source] = check_all_segments_HR(all_segments_HR);
+
 end
 
 function [result,HR_struct_r,type_source] = check_all_segments_HR(all_segments_HR)
@@ -215,7 +215,7 @@ function [result,HR_struct_r,type_source] = check_all_segments_HR(all_segments_H
     type_source = 0;
 
     if isempty(all_segments_HR)
-        fprintf('没有可检查的分段\n');
+%         fprintf('没有可检查的分段\n');
         result = 0;
         return;
     end
@@ -229,8 +229,8 @@ function [result,HR_struct_r,type_source] = check_all_segments_HR(all_segments_H
         
         % 检查是否全为0或全为1
         boool = all(current_segment_HR) || ((current_segment_HR(1) == 0) && all(current_segment_HR(2:end) == 1));
-        fprintf('检查分段%d [%d-%d]: ', ...
-            segment.number, segment.start, segment.end);
+%         fprintf('检查分段%d [%d-%d]: ', ...
+%             segment.number, segment.start, segment.end);
         
         if ~boool
             result = 0;
@@ -266,7 +266,7 @@ function [result,HR_struct_r,type_source] = check_all_segments_HR(all_segments_H
     result = 1;
 end
 
-function [dec_out_all] = decoder(llr_in, N, Kr, node_type_structure, idx_fzn,SR_struct,source_len)
+function [dec_out_all] = decoder(llr_in, N, Kr, node_type_structure, idx_fzn,SR_struct,HR_struct,source_len)
     %--------------------------------------------------------------------------
     % 输入参数：
     %         llr_in：               信道llr
@@ -329,119 +329,18 @@ function [dec_out_all] = decoder(llr_in, N, Kr, node_type_structure, idx_fzn,SR_
          end
         % % --------------------------按节点类型分别译码------------------------% %
         switch type
-            case 1 %
-                sr_x = SR_decode(P(p_out_idx,1),SR_struct{i_node},node_type_structure(i_node ,4),source_len)
+            case 1 % SR_node
+                sr_x = SR_decode(P(p_out_idx,1),SR_struct{i_node},node_type_structure(i_node ,4),source_len);
                 for i = 1 : M        
                     C(c_out_idx(i), 2 - c_idx) = sr_x(1,i);
                 end
                 u(1, dec_idx) = mod(C(c_out_idx, 2 - c_idx)'*G, 2);
-            case -1 % Rate-0
+            case 2 % HR_node
+                hr_x = HR_decode(P(p_out_idx,1),HR_struct{i_node},node_type_structure(i_node ,4),source_len);
                 for i = 1 : M        
-                    C(c_out_idx(i), 2 - c_idx) = 0;
+                    C(c_out_idx(i), 2 - c_idx) = hr_x(1,i);
                 end
-                u(1, dec_idx) = zeros(1, M);
-             case 2 % Rep
-                sum_llr = 0;
-                    for i = 1 : M                        
-                        llrwidth = 8;
-                        frac = 1;
-%                         P_fix = quantize(P(p_out_idx(i), 1),llrwidth,frac);
-                        sum_llr = sum_llr + P(p_out_idx(i),1);
-                    end
-                        if sum_llr >= 0
-                            C(c_out_idx, 2 - c_idx) = zeros(M, 1);
-                            u(1, dec_idx) = zeros(1, M);
-                        else
-                            C(c_out_idx, 2 - c_idx) = ones(M, 1);
-                            u(1, dec_idx) = mod(C(c_out_idx, 2 - c_idx)'*G, 2); 
-                        end
-            case 3 % SPC
-                llr_code = zeros(M, 1);
-                x = zeros(1, M);
-                sum_x = 0;
-                for i = 1 : M
-                    llr_code(i, 1) = P(p_out_idx(i), 1);               % 对每一个接收信号进行硬判决        
-                    if llr_code(i, 1) >= 0
-                        x(1, i) = 0;
-                    else
-                        x(1, i) = 1;
-                    end                                                % x为硬判决比特序列
-                    sum_x = sum_x + x(1, i);                           % 对硬判决比特序列求和
-                end
-                if mod(sum_x, 2) == 0                                  % 如果模二和为0
-                    C(c_out_idx, 2 - c_idx) = x;                       % 硬判决序列即输出比特
-                    u(1, dec_idx) = mod(C(c_out_idx, 2 - c_idx)'*G, 2);
-                else                        
-                     if mod(sum_x, 2) ~= 0                                 % 如果和不为0
-                        alpha_abs = abs(llr_code);
-                        [~, min_index] = min(alpha_abs);                  % 找到llr绝对值最小的比特位置
-                        x(min_index) = mod(x(min_index) + 1, 2);          % 对该比特进行翻转                     
-                        C(c_out_idx, 2 - c_idx) = x;
-                        u(1, dec_idx) = mod(C(c_out_idx, 2 - c_idx)'*G, 2);
-                     end
-                end
-            case 4 % type-III
-                llr_code_1 = zeros(M/2, 1);
-                llr_code_2 = zeros(M/2, 1);
-                x_1 = zeros(1, M/2);
-                x_2 = zeros(1, M/2);
-                x = zeros(1, M);
-                sum_x1 = 0;
-                sum_x2 = 0;
-                j = 1;
-                for i = 1 : 2 : M - 1
-                    if j <= M/2
-                        llr_code_1(j, 1) = P(p_out_idx(i), 1);                       
-    
-                        if llr_code_1(j, 1) >= 0
-                            x_1(1, j) = 0;
-                        else
-                            x_1(1, j) = 1;
-                        end
-                        sum_x1 = sum_x1 + x_1(1, j);
-                        j = j + 1;
-                    end
-                end
-                if mod(sum_x1, 2) ~= 0
-                    alpha_abs = abs(llr_code_1);
-                    [~, min_index] = min(alpha_abs);
-                    x_1(min_index) = mod(x_1(min_index) + 1, 2);
-                end
-
-                j = 1;
-
-                for i = 2 : 2 : M
-                    if j <= M/2
-                        llr_code_2(j, 1) = P(p_out_idx(i), 1);
-
-                        if llr_code_2(j, 1) >= 0
-                            x_2(1, j) = 0;
-                        else
-                            x_2(1, j) = 1;
-                        end
-                        sum_x2 = sum_x2 + x_2(1, j);
-                        j = j + 1;
-                    end
-                
-                end
-                    if mod(sum_x2, 2) ~= 0
-                        alpha_abs = abs(llr_code_2);
-                        [~, min_index] = min(alpha_abs);
-                        x_2(min_index) = mod(x_2(min_index) + 1, 2);
-                    end
-                
-                for x_idx = 1 : M/2
-                    x(2 * x_idx - 1) = x_1(x_idx);
-                    x(2 * x_idx) = x_2(x_idx);
-                end
-
-                C(c_out_idx, 2 - c_idx) = x;                       
-                u(1, dec_idx) = mod(C(c_out_idx, 2 - c_idx)'*G, 2); 
-            case 5 % Normal
-                for i = 1 : M        
-                    C(c_out_idx(i), 2 - c_idx) = 0;
-                end
-                u(1, dec_idx) = zeros(1, M);
+                u(1, dec_idx) = mod(C(c_out_idx, 2 - c_idx)'*G, 2);
         end
                     
         % % -------------------------------求部分和-----------------------------% %
@@ -550,18 +449,24 @@ end
 function [HR_X] = HR_decode(LLR,HR_struct,type_source,source_len)
 
     x_source = zeros(1,source_len);
-    min_idx = [source_len];
+    min_idx = zeros(source_len);
 
     %hard_charge
     HR_X = LLR < 0 ;
-
+    HR_X_xor_res = node_HR_xor_process(HR_X,source_len);
 
     % 计算分段数k
     k = length(LLR) / source_len;
     reshaped_LLR = reshape(LLR, source_len, k)';
-    
 
-    %源节点llr,f
+    % get section position
+    
+    section_position = section_flip_position(HR_struct,HR_X_xor_res);
+    sorted_rows = sort(section_position, 2);  % 每行按升序排序,找到排序后不重复的行索引,提取唯一行
+    [~, unique_idx] = unique(sorted_rows, 'rows');
+    section_position = section_position(sort(unique_idx), :);
+
+    % 源节点llr,f
     source_LLR = zeros(1, source_len);
     for i = 1:source_len
         current_column = reshaped_LLR(:, i);
@@ -606,9 +511,166 @@ function [HR_X] = HR_decode(LLR,HR_struct,type_source,source_len)
     end
 
     %S-PC filp
+    [~,SPC_indices] = findMinPair(LLR, source_len, section_position);
+    if all(HR_struct==0)
+%         HR_X = HR_X;
+    else
+        HR_X(SPC_indices) = 1-HR_X(SPC_indices);
+    end
 
 end
 
+
+function out = node_HR_xor_process(a, len)
+    % 输入检查：确保a是由0和1组成的向量
+    if ~isvector(a) || any(~ismember(a, [0, 1]))
+        error('输入a必须是仅包含0和1的向量');
+    end
+    a = a(:)';  % 转换为行向量便于处理
+    n = length(a);
+    out = [];
+    current_len = len;  % 初始分段长度
+    
+    while current_len <= n/2  % 分段长度不超过向量长度的一半
+        % 计算当前长度下的完整分段数量
+        num_segments = floor(n / current_len);
+        if num_segments < 1
+            break;
+        end
+        
+        % 提取所有完整分段
+        segments = cell(1, num_segments);
+        for i = 1:num_segments
+            start_idx = (i-1)*current_len + 1;
+            end_idx = i*current_len;
+            segments{i} = a(start_idx:end_idx);
+        end
+        
+        % 提取偶数索引的分段（第2,4,6...段）
+        even_indices = 2:2:num_segments;
+        if ~isempty(even_indices)
+            % 初始化异或结果（与分段长度相同的全0向量）
+            xor_result = zeros(1, current_len);
+            % 对所有偶数段进行逐比特异或
+            for k = 1:length(even_indices)
+                xor_result = xor(xor_result, segments{even_indices(k)});
+            end
+            
+            % 对异或后的所有比特再做一次整体异或，得到单个比特
+            final_bit = xor_result(1);
+            for b = 2:current_len
+                final_bit = xor(final_bit, xor_result(b));
+            end
+            
+            out = [out, final_bit];  % 将结果添加到输出向量
+        end
+        
+        current_len = current_len * 2;  % 分段长度翻倍
+    end
+end
+
+function [min_val, indices] = findMinPair(input, len, matrix)
+    % 输入检查
+    n = length(input);
+    if mod(n, len) ~= 0
+        error('输入向量input的长度必须能被len整除');
+    end
+    m = n / len;  % 段的总数量
+    [k, col] = size(matrix);
+   
+    if any(matrix(:) < 1) || any(matrix(:) > m)
+        error('matrix中的段号必须在有效范围内（1到%d）', m);
+    end
+    
+    % 步骤1：将input划分为n/len段（每段长度为len）
+    segments = reshape(input, len, m)';  % 转换为m行len列的矩阵，每行代表一个段
+    
+    % 步骤2：根据matrix计算对位绝对值相加结果及对应索引
+    num_values = k*m;  % 总共有km个数值
+    values = zeros(num_values, 1);      % 存储相加结果
+    indices = zeros(num_values, 2);     % 存储每个结果对应的原始索引对
+    
+    current_idx = 1;  % 用于追踪当前存储位置
+    for i = 1:k
+        a = matrix(i, 1);  % 第一段号
+        b = matrix(i, 2);  % 第二段号
+        for j = 1:len
+            % 计算对位绝对值之和
+            values(current_idx) = abs(segments(a, j)) + abs(segments(b, j));
+            % 计算原始索引（MATLAB索引从1开始）
+            indices(current_idx, 1) = (a - 1) * len + j;  % 第一段中第j个元素的索引
+            indices(current_idx, 2) = (b - 1) * len + j;  % 第二段中第j个元素的索引
+            current_idx = current_idx + 1;
+        end
+    end
+    
+    % 步骤3：找到最小值
+    min_val = min(values);
+    
+    % 步骤4：找到最小值对应的索引对（若有多个最小值，取第一个）
+    min_pos = find(values == min_val, 1);
+    indices = indices(min_pos, :);
+end
+
+function result = section_flip_position(HR_struct,HR_X_xor_res)
+    % 初始化矩阵为[1, 1]
+    mat = [1, 1];
+    v = zeros(size(HR_X_xor_res));
+    
+    % 根据a的值生成c
+    for i = 1:length(HR_X_xor_res)
+        if HR_struct(i) == 0
+            v(i) = -1;
+        else  % a(i) == 1
+            v(i) = HR_X_xor_res(i);
+        end
+    end
+    
+    % 遍历输入向量的每个元素
+    for i = 1:length(v)
+        elem = v(i);
+        current_rows = size(mat, 1);
+        new_mat = [];  % 存储扩展后的矩阵
+        delta = 2^(i-1);  % 增量为2^(i-1)（关键修正）
+        
+        % 根据当前元素值进行扩展
+        for row = 1:current_rows
+            a = mat(row, 1);
+            b = mat(row, 2);
+            
+            switch elem
+                case -1
+                    % 扩展为4行
+                    new_rows = [
+                        a, b;
+                        a + delta, b;
+                        a, b + delta;
+                        a + delta, b + delta
+                    ];
+                case 0
+                    % 扩展为2行
+                    new_rows = [
+                        a, b;
+                        a + delta, b + delta
+                    ];
+                case 1
+                    % 扩展为2行
+                    new_rows = [
+                        a + delta, b;
+                        a, b + delta
+                    ];
+                otherwise
+                    error('输入向量元素必须为-1、0或1');
+            end
+            
+            new_mat = [new_mat; new_rows];  % 拼接扩展后的行
+        end
+        
+        mat = new_mat;  % 更新矩阵为扩展后的结果
+    end
+    
+    result = mat;
+end
 
 function C = kroneckerSumSequence(A)
     % 输入：0/1序列A
