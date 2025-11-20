@@ -121,56 +121,61 @@
 
 
 % 测试数据
-input = [3,1,2,4,6,7,3,5,0, -1, 2, 3, -4, 5, 6, -7];
-len = 4;
-matrix = [1, 4; 2, 3;1,3;2,4;1,2;3,4;];
 
-% 调用函数
-[min_val, indices] = findMinPair(input, len, matrix);
+input = [3,1,2,4,6,7,3,5,0, -1, 2, 3, -4, 5, 6, -7];
+out = input;
+len = 4;
+matrix = [ 4, 2, 3,1,3,2,4,1,2,3,4,4];
+                   % 复制原始向量，避免修改a
+for idx = 1:length(matrix)    % 遍历b的每个元素（循环次数=length(b)）
+    target_idx = matrix(idx); % 当前要修改的a的索引
+    out(target_idx) = 1-out(target_idx);  % 对应位置取相反数
+end
+
 
 % 输出结果
-disp(['最小值：', num2str(min_val)]);
-disp(['对应的索引：', num2str(indices)]);
-
-function [min_val, indices] = findMinPair(input, len, matrix)
-    % 输入检查
-    n = length(input);
-    if mod(n, len) ~= 0
-        error('输入向量input的长度必须能被len整除');
-    end
-    m = n / len;  % 段的总数量
-    [k, col] = size(matrix);
-   
-    if any(matrix(:) < 1) || any(matrix(:) > m)
-        error('matrix中的段号必须在有效范围内（1到%d）', m);
-    end
-    
-    % 步骤1：将input划分为n/len段（每段长度为len）
-    segments = reshape(input, len, m)';  % 转换为m行len列的矩阵，每行代表一个段
-    
-    % 步骤2：根据matrix计算对位绝对值相加结果及对应索引
-    num_values = k*m;  % 总共有km个数值
-    values = zeros(num_values, 1);      % 存储相加结果
-    indices = zeros(num_values, 2);     % 存储每个结果对应的原始索引对
-    
-    current_idx = 1;  % 用于追踪当前存储位置
-    for i = 1:k
-        a = matrix(i, 1);  % 第一段号
-        b = matrix(i, 2);  % 第二段号
-        for j = 1:len
-            % 计算对位绝对值之和
-            values(current_idx) = abs(segments(a, j)) + abs(segments(b, j));
-            % 计算原始索引（MATLAB索引从1开始）
-            indices(current_idx, 1) = (a - 1) * len + j;  % 第一段中第j个元素的索引
-            indices(current_idx, 2) = (b - 1) * len + j;  % 第二段中第j个元素的索引
-            current_idx = current_idx + 1;
-        end
-    end
-    
-    % 步骤3：找到最小值
-    min_val = min(values);
-    
-    % 步骤4：找到最小值对应的索引对（若有多个最小值，取第一个）
-    min_pos = find(values == min_val, 1);
-    indices = indices(min_pos, :);
-end
+% disp(['最小值：', num2str(min_val)]);
+disp(['对应的索引：', num2str(out)]);
+% 
+% function [min_val, indices] = findMinPair(input, len, matrix)
+%     % 输入检查
+%     n = length(input);
+%     if mod(n, len) ~= 0
+%         error('输入向量input的长度必须能被len整除');
+%     end
+%     m = n / len;  % 段的总数量
+%     [k, col] = size(matrix);
+%    
+%     if any(matrix(:) < 1) || any(matrix(:) > m)
+%         error('matrix中的段号必须在有效范围内（1到%d）', m);
+%     end
+%     
+%     % 步骤1：将input划分为n/len段（每段长度为len）
+%     segments = reshape(input, len, m)';  % 转换为m行len列的矩阵，每行代表一个段
+%     
+%     % 步骤2：根据matrix计算对位绝对值相加结果及对应索引
+%     num_values = k*m;  % 总共有km个数值
+%     values = zeros(num_values, 1);      % 存储相加结果
+%     indices = zeros(num_values, 2);     % 存储每个结果对应的原始索引对
+%     
+%     current_idx = 1;  % 用于追踪当前存储位置
+%     for i = 1:k
+%         a = matrix(i, 1);  % 第一段号
+%         b = matrix(i, 2);  % 第二段号
+%         for j = 1:len
+%             % 计算对位绝对值之和
+%             values(current_idx) = abs(segments(a, j)) + abs(segments(b, j));
+%             % 计算原始索引（MATLAB索引从1开始）
+%             indices(current_idx, 1) = (a - 1) * len + j;  % 第一段中第j个元素的索引
+%             indices(current_idx, 2) = (b - 1) * len + j;  % 第二段中第j个元素的索引
+%             current_idx = current_idx + 1;
+%         end
+%     end
+%     
+%     % 步骤3：找到最小值
+%     min_val = min(values);
+%     
+%     % 步骤4：找到最小值对应的索引对（若有多个最小值，取第一个）
+%     min_pos = find(values == min_val, 1);
+%     indices = indices(min_pos, :);
+% end

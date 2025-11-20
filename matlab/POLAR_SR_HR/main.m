@@ -13,7 +13,7 @@ K = N*1/2;
 bp_max_iter = 20;
 max_runs = 1e8;
 resolution = 1e5;
-ebno_vec = 7 : -0.5 : 6;
+ebno_vec = 1 : 0.5 : 3;
 
 %% 信道仿真
 num_block_err = zeros(length(ebno_vec), 3);
@@ -26,13 +26,13 @@ tic
 for i_run = 1 : max_runs 
     if mod(i_run, ceil(max_runs/resolution)) == 1   %% 取1000个中第几次循环
         disp(['Sim iteration running = ', num2str(i_run)]);
-        disp(['N = ' num2str(N) ' K = ' num2str(K) ' BP Max Iter Number = ' num2str(bp_max_iter)])
-        disp('  SNR     SSC BLER   SR_HR BLER   BP BLER   ')
+        disp(['N = ' num2str(N) ' K = ' num2str(K) ' BP Max Iter Number = ' num2str(bp_max_iter)]);
+        disp('  SNR     SSC BLER   SR_HR BLER   BP BLER   ');
         disp(num2str([ebno_vec' num_block_err./num_runs]));
     end
 
 %% 生成源码序列 u
-rng(7);
+%  rng(7);
 info = randi([0 1], K, 1);
 
 %% 码字构造

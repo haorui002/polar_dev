@@ -106,7 +106,7 @@ function [result,SR_struct_r,type_source] = check_all_segments_SR(all_segments_S
         return;
     end
     
-    fprintf('\n=== 开始分段检查 ===\n');
+%     fprintf('\n=== 开始分段检查 ===\n');
     
     % 检查除最后一个分段外的所有分段
     for i = 1:length(all_segments_SR)-1
@@ -148,7 +148,7 @@ function [result,SR_struct_r,type_source] = check_all_segments_SR(all_segments_S
             type_source = 5;
         end
     end
-    fprintf('=== 所有分段检查通过 ===\n');
+%     fprintf('=== 所有分段检查通过 ===\n');
     result = 1;
 end
 
@@ -220,7 +220,7 @@ function [result,HR_struct_r,type_source] = check_all_segments_HR(all_segments_H
         return;
     end
     
-    fprintf('\n=== 开始分段检查 ===\n');
+%     fprintf('\n=== 开始分段检查 ===\n');
     
     % 检查除最后一个分段外的所有分段
     for i = 1:length(all_segments_HR)-1
@@ -262,7 +262,7 @@ function [result,HR_struct_r,type_source] = check_all_segments_HR(all_segments_H
             type_source = 5;
         end
     end
-    fprintf('=== 所有分段检查通过 ===\n');
+%     fprintf('=== 所有分段检查通过 ===\n');
     result = 1;
 end
 
@@ -449,22 +449,16 @@ end
 function [HR_X] = HR_decode(LLR,HR_struct,type_source,source_len)
 
     x_source = zeros(1,source_len);
-    min_idx = zeros(source_len);
+    min_idx = zeros(source_len,1);
 
     %hard_charge
     HR_X = LLR < 0 ;
-    HR_X_xor_res = node_HR_xor_process(HR_X,source_len);
+    
 
     % 计算分段数k
     k = length(LLR) / source_len;
     reshaped_LLR = reshape(LLR, source_len, k)';
 
-    % get section position
-    
-    section_position = section_flip_position(HR_struct,HR_X_xor_res);
-    sorted_rows = sort(section_position, 2);  % 每行按升序排序,找到排序后不重复的行索引,提取唯一行
-    [~, unique_idx] = unique(sorted_rows, 'rows');
-    section_position = section_position(sort(unique_idx), :);
 
     % 源节点llr,f
     source_LLR = zeros(1, source_len);
@@ -510,14 +504,27 @@ function [HR_X] = HR_decode(LLR,HR_struct,type_source,source_len)
         end
     end
 
+    % get section position
+    HR_X_xor_res = node_HR_xor_process(HR_X,source_len);
+    section_position = section_flip_position(HR_struct,HR_X_xor_res);
+    sorted_rows = sort(section_position, 2);  % 每行按升序排序,找到排序后不重复的行索引,提取唯一行
+    [~, unique_idx] = unique(sorted_rows, 'rows');
+    section_position = section_position(sort(unique_idx), :);
+
     %S-PC filp
     [~,SPC_indices] = findMinPair(LLR, source_len, section_position);
-    if all(HR_struct==0)
+    if all(HR_struct==0) || all(HR_X_xor_res==0)
 %         HR_X = HR_X;
     else
-        HR_X(SPC_indices) = 1-HR_X(SPC_indices);
+        c = HR_X;                  
+        for idx = 1:length(SPC_indices)    
+            target_idx = SPC_indices(idx); 
+            c(target_idx) = 1-c(target_idx);  
+        end
+        HR_X = c;
     end
-
+    HR_X = HR_X';
+        
 end
 
 
@@ -588,7 +595,7 @@ function [min_val, indices] = findMinPair(input, len, matrix)
     % 步骤2：根据matrix计算对位绝对值相加结果及对应索引
     num_values = k*m;  % 总共有km个数值
     values = zeros(num_values, 1);      % 存储相加结果
-    indices = zeros(num_values, 2);     % 存储每个结果对应的原始索引对
+    indices = ones(num_values, 2);     % 存储每个结果对应的原始索引对
     
     current_idx = 1;  % 用于追踪当前存储位置
     for i = 1:k
@@ -698,7 +705,7 @@ function C = kroneckerSumSequence(A)
         % 例如(1,0)#(1,0) = [1+1, 1+0, 0+1, 0+0] = [2,1,1,0]
         C = arrayfun(@(x) mod((x + Y),2), X, 'UniformOutput', false);
         C = cell2mat(C');  % 转换为行向量
-        C = reshape(C.',[],1)
+        C = reshape(C.',[],1);
     end
 end
 
