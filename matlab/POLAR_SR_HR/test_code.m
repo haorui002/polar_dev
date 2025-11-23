@@ -1,7 +1,7 @@
 % 
 % 示例输入向量（仅包含0和1）
-LLR = randi([-5,5],1,32);
-v = [1, 0,1];  % 可替换为任意0-1向量
+LLR = randi([0,1],1,16);
+v = [1, 0,1,0];  % 可替换为任意0-1向量
 
 % % 找出值为1的位置
 % ones_pos = find(v == 1);
@@ -26,7 +26,7 @@ v = [1, 0,1];  % 可替换为任意0-1向量
 % 
 % 
 % 
-source_LLR = HR_decode(LLR,v,0,4)
+source_LLR = xor_count_skip_segments(LLR,v,4)
 % % 显示结果
 % disp('所有可能的序列：');
 % disp(sequences);
@@ -36,6 +36,144 @@ disp('LLR:');
 disp(LLR);
 disp('源节点LLR：');
 disp(source_LLR);
+
+function count_ones = xor_count_skip_segments(LLR, seg, len)
+    % 函数功能：
+    %   1. 将输入向量 LLR 按照跳步方式分段：
+    %      - 第 1 段: LLR(1), LLR(1+len), LLR(1+2*len), ...
+    %      - 第 2 段: LLR(2), LLR(2+len), LLR(2+2*len), ...
+    %      - ...
+    %      - 第 len 段: LLR(len), LLR(len+len), LLR(len+2*len), ...
+    %   2. 将每一段与向量 seg 进行按位异或。
+    %   3. 统计每次异或结果中 '1' 的个数。
+    %   4. 返回所有统计结果。
+    %
+    % 输入参数：
+    %   LLR - 输入的二进制向量 (可以是数值向量或逻辑向量)。
+    %   seg - 用于异或操作的二进制向量 (长度必须与每段的长度一致)。
+    %   len - 一个整数，定义了跳步的步长和分段的数量。
+    %
+    % 输出参数：
+    %   count_ones - 一个行向量，其第 i 个元素表示第 i 段与 seg 异或后结果中 '1' 的个数。
+
+    % 检查输入向量是否为空
+    if isempty(LLR) || isempty(seg)
+        count_ones = 0;
+        warning('输入向量 LLR 或 seg 为空。');
+        return;
+    end
+
+    % 检查 len 是否为正整数
+    if ~isscalar(len) || len <= 0 || len ~= floor(len)
+        error('输入 len 必须是一个正整数。');
+    end
+    
+    % 获取 LLR 的总长度
+    total_len_LLR = length(LLR);
+    
+    % 初始化用于存储计数结果的向量
+    count_ones = 0;
+    
+    % 循环处理每一段
+    for i = 1:len
+        % 生成当前段的索引：i, i+len, i+2*len, ... 
+        % 直到索引不超过 LLR 的总长度
+        indices = i:len:total_len_LLR;
+        
+        % 如果索引为空，说明没有足够的元素构成这一段，跳过
+        if isempty(indices)
+            warning('LLR 的长度不足以构成第 %d 段。', i);
+            continue;
+        end
+        
+        % 提取当前段
+        current_segment = LLR(indices)
+        
+        % 检查当前段的长度是否与 seg 的长度一致
+        if length(current_segment) ~= length(seg)
+            warning('第 %d 段的长度 (%d) 与 seg 的长度 (%d) 不一致，无法进行异或操作。', ...
+                i, length(current_segment), length(seg));
+            continue;
+        end
+        
+        % 与 seg 进行按位异或
+        xor_result = xor(current_segment, seg);
+        
+        % 统计异或结果中 '1' 的个数，并存储
+        count_ones = count_ones+ sum(xor_result(:));
+    end
+
+end
+
+
+
+function result = xor_sum_segments(LLR, sou)
+    % 函数功能：
+    %   1. 将输入向量 LLR 按照 sou 的长度分段。
+    %   2. 将分段结果按奇偶位置分为两组。
+    %   3. 对两组中对应位置的段进行逐元素异或。
+    %   4. 统计所有异或结果中 '1' 的总数并返回。
+    %
+    % 输入参数：
+    %   LLR - 输入的二进制向量 (可以是数值向量或逻辑向量)。
+    %   sou - 一个整数，定义了每段的长度。
+    %
+    % 输出参数：
+    %   result - 一个整数，代表最终所有异或结果中 '1' 的总数。
+
+    % 检查输入是否为空
+    if isempty(LLR)
+        result = 0;
+        return;
+    end
+
+    % 检查 sou 是否为正整数
+    if ~isscalar(sou) || sou <= 0 || sou ~= floor(sou)
+        error('输入 sou 必须是一个正整数。');
+    end
+
+    % 检查 LLR 的长度是否能被 sou 整除
+    len_LLR = length(LLR);
+    if mod(len_LLR, sou) ~= 0
+        error('输入向量 LLR 的长度 (%d) 必须能被 sou (%d) 整除。', len_LLR, sou);
+    end
+
+    % ------------------- 步骤 1: 分段 -------------------
+    % 使用 reshape 函数将向量按 sou 长度分段。
+    % 每一行代表一个段。
+    num_segments = len_LLR / sou;
+    segments = reshape(LLR, sou, num_segments)'; 
+    % 注意：reshape 是按列优先的，所以转置一下 (') 使其按行排列，更符合直觉。
+
+    % ------------------- 步骤 2: 分组 -------------------
+    % 提取奇数索引的段 (第1, 3, 5, ... 段)
+    K_odd = segments(1:2:end, :);
+    
+    % 提取偶数索引的段 (第2, 4, 6, ... 段)
+    K_eve = segments(2:2:end, :);
+
+    % 检查两组数量是否相等，如果 K 是奇数，最后一个奇数段将没有对应的偶数段
+    if size(K_odd, 1) ~= size(K_eve, 1)
+        warning('段的总数 K = %d 是奇数。最后一个奇数段将不会被处理。', num_segments);
+        % 为了使后续计算可行，我们只处理前 N 对，其中 N 是较小的组数
+        min_num = min(size(K_odd, 1), size(K_eve, 1));
+        K_odd = K_odd(1:min_num, :);
+        K_eve = K_eve(1:min_num, :);
+    end
+
+    % ------------------- 步骤 3: 对位异或 -------------------
+    % 使用逻辑异或运算符 xor 对两个矩阵的对应元素进行异或操作
+    xor_results = xor(K_odd, K_eve);
+
+    % ------------------- 步骤 4: 求和 -------------------
+    % 计算 xor_results 矩阵中所有 '1' 的个数
+    result = sum(xor_results(:));
+
+end
+
+
+
+
 % disp('绝对值之和最大的行是：');
 % disp(result);
 
@@ -241,39 +379,3 @@ disp(source_LLR);
 % end
 % 
 
-function [source_LLR] = HR_decode(LLR,HR_struct,type_source,source_len)
-% SEQUENCE_PROCESSOR 处理输入序列并生成输出序列
-% 输入参数：
-%   m - 输入序列（向量）
-%   a - 输出序列长度
-% 输出参数：
-%   output_seq - 处理后的输出序列
-
-    % 计算分段数k
-    k = length(LLR) / source_len;
-     HR_X = LLR < 0;
-     min_idx = [source_len];
-
-    % 将序列m重塑为k行a列的矩阵
-    % 每列对应输出序列的一个位置
-    reshaped_LLR = reshape(LLR, source_len, k)';
-    
-    % 初始化输出序列
-    source_LLR = zeros(1, source_len);
-    
-    % 遍历输出序列的每个位置
-    for i = 1:source_len
-        % 获取当前列的所有元素
-        current_column = reshaped_LLR(:, i);
-        
-        % 计算绝对值最小值
-        [min_abs_val, min_idx(i)] = min(abs(current_column));
-        min_idx(i) = (min_idx(i)-1)*source_len + i;
-        % 计算符号乘积
-        sign_product = (-1)^sum(current_column < 0);
-        
-        % 设置输出值：绝对值最小值乘以符号乘积
-        source_LLR(i) = min_abs_val * sign_product;
-    end
-
-end
