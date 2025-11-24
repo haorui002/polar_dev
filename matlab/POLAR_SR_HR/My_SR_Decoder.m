@@ -17,21 +17,18 @@ end
 
 function [SR_struct,  code_struct, cnt_struct] = identify_node(idx_fzn, idx, code_struct, cnt_struct,SR_struct, source_len)
     N = length(idx_fzn);
-        if is_segment_SR(idx_fzn,source_len)                            %SR节点
-            [~,SR_struct{cnt_struct},type_source] = is_segment_SR(idx_fzn,source_len);
-            code_struct(cnt_struct, :) = [idx(1), N, -1,type_source];
-            cnt_struct = cnt_struct + 1;
-        elseif (idx_fzn(1) == 0) && all(idx_fzn(2 : end) == 1)          % SPC节点
-            
+        if (idx_fzn(1) == 0) && all(idx_fzn(2 : end) == 1)          % SPC节点
             code_struct(cnt_struct, :) = [idx(1), N, 3,7];
             cnt_struct = cnt_struct + 1;
         elseif all(idx_fzn == 1)                                        % Rate-1节点
-            
             code_struct(cnt_struct, :) = [idx(1), N, 1,7];
             cnt_struct = cnt_struct + 1;
-        elseif all(idx_fzn(1 : 2) == 0) && all(idx_fzn(3 : end) == 1)  % type-III节点
-            
+        elseif all(idx_fzn(1 : 2) == 0) && all(idx_fzn(3 : end) == 1)  % type-III节点  
             code_struct(cnt_struct, :) = [idx(1), N, 4,7];
+            cnt_struct = cnt_struct + 1;
+        elseif is_segment_SR(idx_fzn,source_len)                            %SR节点
+            [~,SR_struct{cnt_struct},type_source] = is_segment_SR(idx_fzn,source_len);
+            code_struct(cnt_struct, :) = [idx(1), N, -1,type_source];
             cnt_struct = cnt_struct + 1;
         elseif N > source_len
             [SR_struct, code_struct, cnt_struct] = identify_node(idx_fzn(1 : N/2), idx(1 : N/2) ,code_struct, cnt_struct,SR_struct, source_len);

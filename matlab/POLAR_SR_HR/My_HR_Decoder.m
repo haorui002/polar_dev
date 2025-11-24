@@ -344,6 +344,7 @@ end
 function [HR_X] = HR_decode(LLR,HR_struct,type_source,source_len)
 
     x_source = zeros(1,source_len);
+    min_idx_section = zeros(source_len,1);
     min_idx = zeros(source_len,1);
 
     %hard_charge
@@ -359,11 +360,13 @@ function [HR_X] = HR_decode(LLR,HR_struct,type_source,source_len)
     source_LLR = zeros(1, source_len);
     for i = 1:source_len
         current_column = reshaped_LLR(:, i);
-        [min_abs_val, min_idx(i)] = min(abs(current_column));
-        min_idx(i) = (min_idx(i)-1)*source_len + i;
+        [min_abs_val(i), min_idx_section(i)] = min(abs(current_column));
+%         [second_abs_val(i),second_min_idx_section(i)] = find_second_min_index(abs(current_column));
+        min_idx(i) = (min_idx_section(i)-1)*source_len + i;
         sign_product = (-1)^sum(current_column < 0);
-        source_LLR(i) = min_abs_val * sign_product;
+        source_LLR(i) = min_abs_val(i) * sign_product;
     end
+%     [~,min_source_idx] = min(abs(source_LLR));
 
     % decode source
     switch type_source
@@ -401,13 +404,21 @@ function [HR_X] = HR_decode(LLR,HR_struct,type_source,source_len)
 
     % get section position
     HR_X_xor_res = node_HR_xor_process(HR_X,source_len);
-    section_position = section_flip_position(HR_struct,HR_X_xor_res);
-    sorted_rows = sort(section_position, 2);  % 每行按升序排序,找到排序后不重复的行索引,提取唯一行
-    [~, unique_idx] = unique(sorted_rows, 'rows');
-    section_position = section_position(sort(unique_idx), :);
+%     section_position = section_flip_position(HR_struct,HR_X_xor_res);
+%     sorted_rows = sort(section_position, 2);  % 每行按升序排序,找到排序后不重复的行索引,提取唯一行
+%     [~, unique_idx] = unique(sorted_rows, 'rows');
+%     section_position = section_position(sort(unique_idx), :);
+    section_number = get_section_number(min_idx_section,HR_X_xor_res,HR_struct);
+%     section_number_2 = get_section_number(second_min_idx_section,HR_X_xor_res,HR_struct);
+    [~,source_section_order] = sort(min_abs_val); 
+%     [~,source_section_order_2] = sort(second_abs_val);
+
 
     %S-PC filp
-    [~,SPC_indices] = findMinPair(LLR, source_len, section_position);
+    SPC_indices_1 = get_SPC_pair(source_len,min_idx_section, section_number,source_section_order);
+%     SPC_indices_2 = get_SPC_pair(source_len,second_min_idx_section,section_number_2,source_section_order_2);
+%     [~,SPC_indices] = findMinPair(LLR, source_len, section_position);
+    SPC_indices = find_min_abs_sum_row(SPC_indices_1,LLR);
     if all(HR_struct==0) || all(HR_X_xor_res==0)
 %         HR_X = HR_X;
     else
@@ -637,4 +648,204 @@ function spc_result = spc_decode(spc_LLR)
     end
     
     spc_result = step1;
+end
+
+function out = get_section_number(source_position, struct, mask)
+    % get_section_number 生成基于位置、结构和掩码的编码矩阵（保留向量反转）
+    %
+    % 输入:
+    %   source_position - 数值向量，原始位置索引
+    %   struct          - 二进制向量，用于异或操作的结构
+    %   mask            - 二进制向量，指示哪些位是固定的(1)或可变的(0)
+    %
+    % 输出:
+    %   out             - 数值矩阵，每行对应source_position一个元素的所有可能编码，
+    %                     空缺位置用NaN填充
+
+    % 将位置减一
+    pos = source_position - 1;
+    
+    % 保留原有的反转逻辑
+    mask_vec = mask(end:-1:1);
+    struct_vec = struct(end:-1:1);
+    
+    % 确定二进制位宽并校验输入维度
+    n = length(struct_vec);
+    if length(mask_vec) ~= n
+        error('struct 和 mask 必须具有相同的长度。');
+    end
+    
+    % 初始化存储每个位置结果的元胞数组
+    out_cell = cell(length(pos), 1);
+    
+    for i = 1:length(pos)
+        % 将当前位置转换为n位二进制向量（确保高位在前，与dec2bin输出一致）
+        pos_binary_str = dec2bin(pos(i), n);
+        pos_binary = str2double(cellstr(pos_binary_str(:)));  % 转换为n×1向量
+        
+        % 计算固定位的值（mask为1的位强制固定，0的位保留为占位符）
+        fixed_bits = xor(pos_binary', struct_vec) .* mask_vec;
+        
+        % 找到可变位的索引（mask为0的位）
+        variable_indices = find(mask_vec == 0);
+        k = length(variable_indices);  % 可变位数量
+        
+        if k == 0
+            % 无可变位，仅一种组合
+            combined_binary = fixed_bits;  % 转为1×n行向量，便于后续处理
+        else
+            % 生成所有2^k种可变位组合（核心修复：确保维度正确）
+            num_combinations = 2^k;
+            % dec2bin生成num_combinations行×k列的字符矩阵（每行一个组合）
+            variable_combinations_str = dec2bin(0 : num_combinations - 1, k);
+            % 按行转换为数值矩阵（num_combinations行×k列），避免按列展开
+            variable_combinations = cellfun(@(row) str2double(cellstr(row(:)))', ...
+                                           mat2cell(variable_combinations_str, ones(num_combinations,1), k), ...
+                                           'UniformOutput', false);
+            variable_combinations = cell2mat(variable_combinations);  % 直接得到num_combinations×k矩阵
+            
+            % 初始化组合矩阵：num_combinations行×n列，填充固定位
+            combined_binary = repmat(fixed_bits, num_combinations, 1);
+            % 赋值可变位（variable_combinations为num_combinations×k，与目标列数匹配）
+            combined_binary(:, variable_indices) = variable_combinations;
+        end
+        
+        % 将二进制向量转换为十进制数（每行一个二进制数）
+        decimal_values = zeros(size(combined_binary, 1), 1);
+        for j = 1:size(combined_binary, 1)
+            % 拼接当前行的二进制位，去除空格
+            binary_str = strrep(num2str(combined_binary(j, :)), ' ', '');
+            decimal_values(j) = bin2dec(binary_str);
+        end
+        
+        % 加1后存入元胞数组（还原为原始位置索引逻辑）
+        out_cell{i} = decimal_values + 1;
+    end
+
+    % 构建输出矩阵（每行对应一个source_position元素，空缺填NaN）
+    if isempty(out_cell)
+        out = [];
+        return;
+    end
+    
+    num_rows = length(out_cell);
+    max_cols = max(cellfun(@length, out_cell));  % 最大列数（最多组合数）
+    out = NaN(num_rows, max_cols);  % 初始化输出矩阵
+    
+    % 逐行填充结果
+    for i = 1:num_rows
+        out(i, 1:length(out_cell{i})) = out_cell{i};
+    end
+    
+    out = double(out);  % 确保输出为double类型
+end
+
+function out = get_SPC_pair(len, source_section, section_number, order)
+    % get_spc_pair 生成源段与目标段的索引对矩阵
+    %
+    % 输入:
+    %   len             - 标量，用于计算最终索引的长度值
+    %   source_section  - 向量，源段编号
+    %   section_number  - 矩阵，每行对应source_section一个元素的所有可能目标段编号
+    %   order           - 向量，指定处理source_section元素的顺序（元素为source_section的索引）
+    %
+    % 输出:
+    %   out             - 2列矩阵，每行是一个索引对 [源索引, 目标索引]
+
+    % 检查输入参数维度是否匹配
+    if length(source_section) ~= size(section_number, 1)
+        error('source_section 的长度必须与 section_number 的行数相同。');
+    end
+    
+    % 计算输出矩阵的总行数
+    % 假设 section_number 矩阵中多余的元素用 NaN 填充
+    total_rows = 0;
+    for i = 1:size(section_number, 1)
+        % 计算每行中非 NaN 元素的数量
+        total_rows = total_rows + sum(~isnan(section_number(i, :)));
+    end
+    
+    % 初始化输出矩阵
+    out = zeros(total_rows, 2);
+    current_row = 1; % 跟踪当前填充到第几行
+    
+    % 按照 order 指定的顺序进行处理
+    for i = 1:length(order)
+        % 获取当前要处理的 source_section 的索引
+        idx = order(i);
+        
+        % 获取源段编号
+        a = source_section(idx);
+        
+        % 获取对应的所有可能目标段编号（排除 NaN）
+        section_row = section_number(idx, :);
+        valid_section_vals = section_row(~isnan(section_row));
+        
+        % 为每个有效的目标段编号生成一对索引
+        for j = 1:length(valid_section_vals)
+            section_val = valid_section_vals(j);
+            
+            % 计算索引对
+            pair_first = (a-1) * len + idx;
+            pair_second = (section_val-1) * len + idx;
+            
+            % 填充到输出矩阵
+            out(current_row, :) = [pair_first, pair_second];
+            
+            % 移动到下一行
+            current_row = current_row + 1;
+        end
+    end
+end
+
+
+function ranks = get_order(vec)
+    [~, idx] = sort(vec); 
+    ranks = zeros(size(vec));
+    for i = 1:length(vec)
+        ranks(idx(i)) = i;
+    end
+end
+
+function [second_min_value, second_min_index] = find_second_min_index(vec)
+    % find_second_min_with_index 在无NaN的向量中找到次小值及其索引
+    %
+    % 输入:
+    %   vec - 数值向量 (无NaN值)
+    %
+    % 输出:
+    %   second_min_value - 向量的次小值
+    %   second_min_index - 次小值在原始向量中的索引 (如果有多个相同的次小值，返回第一个出现的索引)
+
+    % 检查向量长度
+    if length(vec) < 2
+        error('向量长度必须至少为2才能找到次小值。');
+    end
+
+    % 对向量进行升序排序，并获取排序后的索引
+    [sorted_values, sorted_indices] = sort(vec);
+
+    % 获取次小值和它的原始索引
+    second_min_value = sorted_values(2);
+    second_min_index = sorted_indices(2);
+end
+
+function min_row = find_min_abs_sum_row(matrix_2col, llr)
+    % find_min_abs_sum_row 计算2列矩阵每行对应向量元素的绝对值和，返回和最小的行
+    % 输入：
+    %   matrix_2col - 2列数值矩阵（每行两个元素作为llr的索引，索引需为正整数）
+    %   llr         - 数值向量（长度需大于矩阵中所有索引值）
+    % 输出：
+    %   min_row     - 和最小的一行（2元素向量）
+    
+    % 提取矩阵两列作为索引（确保索引为整数）
+    idx1 = matrix_2col(:, 1);
+    idx2 = matrix_2col(:, 2);
+    
+    % 计算每行对应llr元素的绝对值和（核心逻辑）
+    abs_sum = abs(llr(idx1)) + abs(llr(idx2));
+    
+    % 找到绝对值和最小的索引，返回对应行
+    [~, min_idx] = min(abs_sum);
+    min_row = matrix_2col(min_idx, :);
 end
