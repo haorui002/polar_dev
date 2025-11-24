@@ -11,10 +11,10 @@ WQ_LIST = WQ_LIST_4096;
 n = 12;
 N = 2^n;
 K = N*1/2;
-bp_max_iter = 20;
+bp_max_iter = 10;
 max_runs = 1e8;
 resolution = 1e5;
-ebno_vec = 1 : 0.5 : 6;
+ebno_vec = 1 : 0.2 : 4;
 
 %% 信道仿真
 num_block_err = zeros(length(ebno_vec), 8);
@@ -48,7 +48,7 @@ info = randi([0 1], K, 1);
 %% 三种译码方法
         [info_esti_ssc] = SSC_Decoder_LLR(N, K, llr, WQ_LIST);
         [info_esti_sr_hr] = SR_HR_Decoder_LLR(N, K, llr, WQ_LIST);
-%         [info_esti_bp, ~, ~, ~] = BP_Decoder_LLR(info_bits, frozen_bits, llr', bp_max_iter, M_up, M_down);
+        [info_esti_bp, ~, ~, ~] = BP_Decoder_LLR(info_bits, frozen_bits, llr', bp_max_iter, M_up, M_down);
         [info_esti_sr_only] = SR_Only_Decoder(N, K, llr, WQ_LIST);
         [info_esti_hr_only] = HR_Only_Decoder(N, K, llr, WQ_LIST);
         [info_esti_my_sr] = My_SR_Decoder(N, K, llr, WQ_LIST);
@@ -62,10 +62,10 @@ info = randi([0 1], K, 1);
             num_block_err(i_ebno,2) =  num_block_err(i_ebno,2) + 1;
             num_bit_err(i_ebno,2) = num_bit_err(i_ebno,2) + sum(info ~= info_esti_sr_hr);
         end        
-%         if any(info_esti_bp ~= info)
-%             num_block_err(i_ebno,3) =  num_block_err(i_ebno,3) + 1;
-%             num_bit_err(i_ebno,3) = num_bit_err(i_ebno,3) + sum(info ~= info_esti_bp);
-%         end
+        if any(info_esti_bp ~= info)
+            num_block_err(i_ebno,3) =  num_block_err(i_ebno,3) + 1;
+            num_bit_err(i_ebno,3) = num_bit_err(i_ebno,3) + sum(info ~= info_esti_bp);
+        end
         if any(info_esti_sr_only ~= info)
             num_block_err(i_ebno,4) =  num_block_err(i_ebno,4) + 1;
             num_bit_err(i_ebno,4) = num_bit_err(i_ebno,4) + sum(info ~= info_esti_sr_only);
@@ -85,7 +85,7 @@ info = randi([0 1], K, 1);
     end
 end
 toc
-[bler, ber] = Simulation(max_iter, max_err, max_runs, resolution, ebno_vec, N, K);
+% [bler, ber] = Simulation(max_iter, max_err, max_runs, resolution, ebno_vec, N, K);
 
 
 

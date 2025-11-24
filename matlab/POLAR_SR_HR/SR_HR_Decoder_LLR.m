@@ -593,7 +593,7 @@ function [min_val, indices] = findMinPair(input, len, matrix)
     segments = reshape(input, len, m)';  % 转换为m行len列的矩阵，每行代表一个段
     
     % 步骤2：根据matrix计算对位绝对值相加结果及对应索引
-    num_values = k*m;  % 总共有km个数值
+    num_values = k*len;  % 总共有km个数值
     values = zeros(num_values, 1);      % 存储相加结果
     indices = ones(num_values, 2);     % 存储每个结果对应的原始索引对
     
