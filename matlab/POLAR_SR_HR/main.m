@@ -4,17 +4,18 @@ addpath('Decoding_Index/')
 addpath('GA/')
 load('WQ_LIST_4096');
 load('WQ_LIST_1024');
-WQ_LIST = WQ_LIST_4096;
+WQ_LIST = WQ_LIST_1024;
 % WQ_LIST = WQ_LIST_4096;
 
 %% 配置仿真基本信息：码长，码率，最大仿真循环次数，打印信息频率，信噪比范围。
-n = 12;
+n = 10;
 N = 2^n;
 k_list = [1/4 , 3/8 , 1/2 , 5/8 , 3/4];
+% k_list = [   3/4];
 K_list = N*k_list;
 bp_max_iter = 10;
 max_runs = 10000;
-resolution = 1000;
+resolution = 10;
 ebno_vec = 1 : 0.2 : 4;
 
 %% 信道仿真
@@ -124,10 +125,10 @@ for i = 1 : length(K_list)
     sim_data.timestamp = datetime;  % 添加时间戳
     
     % 2. 生成唯一文件名（包含码长、码率、时间戳）
-    rate_str = rat(K/N);
-    timestamp_str = datestr(now, 'yyyymmdd_HHMM');
-    filename = sprintf('sim_data_saved/result__N_%d__rate%s__runs%d__%s.mat', ...
-                      N, rate_str, max_runs, timestamp_str);
+    g = gcd(K,N);
+    timestamp_str = datestr(now, 'yyyy_mmdd_HHMM');
+    filename = sprintf('sim_data_saved/result__N_%d__rate_%d_%d__runtimes_%d__%s.mat', ...
+                      N, K/g,N/g, max_runs, timestamp_str);
     
     % 3. 保存数据
     save(filename, 'sim_data');
@@ -153,10 +154,15 @@ global_sim_data.global_num_block_err = num_block_err;
 global_sim_data.global_num_bit_err = num_bit_err;
 global_sim_data.global_num_runs = num_runs;
 global_sim_data.global_bler = num_block_err ./ num_runs;
-global_sim_data.global_ber = num_bit_err ./ (num_runs * repmat(K_list', 1, length(ebno_vec))');
+
+all_bits = K_list * repmat(max_runs,length(K_list),1);
+K_expanded = repmat(all_bits, length(ebno_vec), 8); 
+
+
+global_sim_data.global_ber = num_bit_err ./ K_expanded;
 global_sim_data.timestamp = datetime;
 
-global_filename = sprintf('sim_data_saved/global_resyult__N%d__runs%d__%s.mat', ...
+global_filename = sprintf('sim_data_saved/global_result__N_%d__runtimes_%d__%s.mat', ...
                           N, max_runs, datestr(now, 'yyyymmdd_HHMM'));
 save(global_filename, 'global_sim_data');
 disp(['全局数据已保存至：' global_filename]);
