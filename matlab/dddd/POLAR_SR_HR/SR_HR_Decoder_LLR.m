@@ -289,8 +289,6 @@ function [dec_out_all] = decoder(llr_in, N, Kr, node_type_structure, idx_fzn,SR_
     dec_out_all = zeros(Kr, 1);         % output all decoded bits, for debug
     n = log2(N);
 
-    mean_value_all = mean(abs(llr_in));
-
     % % ----------------------------节点类型参数----------------------------% %
     % for start_bit_idx = 1 : N
     for i_node = 1 : T                                     
@@ -320,12 +318,6 @@ function [dec_out_all] = decoder(llr_in, N, Kr, node_type_structure, idx_fzn,SR_
 	        p_out_idx = 2^(stage - 1): 2^stage - 1; 	    % row index of P output
 	        c_in_idx = 2^(stage - 1): 2^stage - 1;		    % row index of C input
     
-            if(stage == m+1)
-%             llr_hard =  (P(p_in_idx, 1)< 0)';
-%             xnor_result = ~xor(xor(llr_hard(1:M), llr_hard(M+1:end)),C(c_in_idx,1));
-              mean_value = mean(abs(P(p_in_idx, 1)));
-            end
-
             if(stage == start_stage)
                 if(start_bit_idx == 1)                  
 			        P(p_out_idx, 1) = pe(0, num_pe, llr_in, []);                           % first step of bit 0, f-pe
@@ -343,7 +335,7 @@ function [dec_out_all] = decoder(llr_in, N, Kr, node_type_structure, idx_fzn,SR_
         % % --------------------------按节点类型分别译码------------------------% %
         switch type
             case 1 % SR_node
-                sr_x = SR_decode(P(p_out_idx,1),SR_struct{i_node},node_type_structure(i_node ,4),source_len,mean_value_all);
+                sr_x = SR_decode(P(p_out_idx,1),SR_struct{i_node},node_type_structure(i_node ,4),source_len);
                 for i = 1 : M        
                     C(c_out_idx(i), 2 - c_idx) = sr_x(1,i);
                 end
@@ -384,116 +376,39 @@ function [dec_out_all] = decoder(llr_in, N, Kr, node_type_structure, idx_fzn,SR_
         end
 end
 
-function [SR_X] = SR_decode(LLR,SR_struct,type_source,source_len,mean_value)
+function [SR_X] = SR_decode(LLR,SR_struct,type_source,source_len)
     % 示例输入向量（仅包含0和1）
     v = SR_struct;  % 可替换为任意0-1向量
-    len_LLR = length(LLR);
+    
     % 找出值为1的位置
     ones_pos = find(v == 1);
     k = length(ones_pos);  % 1的个数
 
     % 生成所有可能的0-1组合（共2^k种）
     combinations = dec2bin(0:2^k-1, k) - '0';  % 转换为数值矩阵
-
-    %hard decision LLR
-    SR_X_hard = LLR < 0;
-
-
+    
     % 生成所有可能的序列
     num_sequences = size(combinations, 1);
     sequences = repmat(v, num_sequences, 1);  % 初始化序列矩阵
-    SR_path_all = [];
     SR_path = [];
     SR_path_max = [];
-    source_LLR_allpath_purn = [];
     source_LLR_allpath = [];
     source_LLR = [];
     SR_X = [];
-   
     % 填充所有组合
-    for i = 1:num_sequences 
+    for i = 1:num_sequences
         sequences(i, ones_pos) = combinations(i, :);
-    end
-
-    %剪枝
-    valid_LLR_position = abs(LLR) > mean_value*0.4; 
-    [path_esti_metric,valid_number] = xor_sum_segments(SR_X_hard,v,valid_LLR_position);
-%     [path_esti_metric,valid_number] = xor_sum_segments(SR_X_hard,v,position);
-    len_LLR_1_4 = len_LLR/4;
-    bound_LLR = valid_number/2;
-    path_esti_abs = path_esti_metric;
-    path_esti = path_esti_metric;
-
-    path_esti_abs(ones_pos) = abs(path_esti_metric(ones_pos)-bound_LLR(ones_pos));
-    path_esti(ones_pos) = path_esti_metric(ones_pos) > bound_LLR(ones_pos); 
-
-    [~, max_index_in_path] = max(path_esti_abs);
-    path_esti(max_index_in_path) = 1 - path_esti(max_index_in_path);
-
-%     key_position = ones_pos(max_index_in_path);
-    if path_esti_metric(max_index_in_path) > bound_LLR(max_index_in_path)  && k>5
-        rows_to_keep = sequences(:, max_index_in_path) == 1;
-    elseif                        k>5
-        rows_to_keep = sequences(:, max_index_in_path) == 0;
-    else
-        rows_to_keep = true(num_sequences, 1); 
+        SR_path(i,:) = kroneckerSumSequence(sequences(i,:));
+        source_LLR_allpath(i,:) = funcGG(LLR,SR_path(i,:));
     end
     
-%     sequence_pruned = [sequences(rows_to_keep, :);path_esti];
-    sequence_pruned = sequences(rows_to_keep, :);
-
-
-%     result_matrix = zeros(num_sequences/2, length(v));
-%     % 第一行是原始向量
-%     result_matrix(1, :) = path_esti;
-%     % 遍历路径估计中的每个索引，生成对应的翻转行
-%     for i = 1:k
-%         flipped_row = path_esti;
-%         flip_index = ones_pos(i);
-%         flipped_row(flip_index) = 1 - flipped_row(flip_index);
-%         result_matrix(i + 1, :) = flipped_row;
-%     end
-
-    for i = 1:size(sequence_pruned,1)
-        SR_path(i,:) = kroneckerSumSequence(sequence_pruned(i,:));
-        source_LLR_allpath_purn(i,:) = funcGG(LLR,SR_path(i,:));
-    end
-
-
-    for i = 1:size(sequences,1)
-        SR_path_all(i,:) = kroneckerSumSequence(sequences(i,:));
-        source_LLR_allpath(i,:) = funcGG(LLR,SR_path_all(i,:));
-    end
-
-
-%         metric_path(i,:) = xor_count_skip_segments(SR_X_hard , SR_path_all(i,:) , source_len);
-%     % 步骤1：对路径度量进行升序排序，获取排序索引
-%     [~, sort_idx] = sort(metric_path,'descend');  % sort_idx为排序后的索引
-%     
-%     % 步骤2：根据索引对a的行进行排序
-%     SR_Path_sorted = SR_path_all(sort_idx, :);  % 按升序排列路径的行
-%     
-%     % 步骤3：计算保留的行数（去掉度量值大的一半）
-%     keep_rows = floor(num_sequences / 2);   
-% 
-%     % 截取前半部分
-%     if keep_rows > 2
-%         SR_path = SR_Path_sorted(1:keep_rows, :);
-%     else
-%         SR_path = SR_path_all;
-%     end
-
-
-    
-    row_abs_sum = sum(abs(source_LLR_allpath_purn), 2);
-    row_abs_sum_all = sum(abs(source_LLR_allpath), 2);
-
+    row_abs_sum = sum(abs(source_LLR_allpath), 2);
     % 找到绝对值和最大的行索引
     [~, max_idx] = max(row_abs_sum);
     
     % 提取对应的行
     SR_path_max = SR_path(max_idx,:);
-    source_LLR = source_LLR_allpath_purn(max_idx, :);
+    source_LLR = source_LLR_allpath(max_idx, :);
     x_source = zeros(1,source_len);
     
     % decode source
@@ -539,7 +454,6 @@ end
 function [HR_X] = HR_decode(LLR,HR_struct,type_source,source_len)
 
     x_source = zeros(1,source_len);
-    min_idx_section = zeros(source_len,1);
     min_idx = zeros(source_len,1);
 
     %hard_charge
@@ -555,13 +469,11 @@ function [HR_X] = HR_decode(LLR,HR_struct,type_source,source_len)
     source_LLR = zeros(1, source_len);
     for i = 1:source_len
         current_column = reshaped_LLR(:, i);
-        [min_abs_val(i), min_idx_section(i)] = min(abs(current_column));
-%         [second_abs_val(i),second_min_idx_section(i)] = find_second_min_index(abs(current_column));
-        min_idx(i) = (min_idx_section(i)-1)*source_len + i;
+        [min_abs_val, min_idx(i)] = min(abs(current_column));
+        min_idx(i) = (min_idx(i)-1)*source_len + i;
         sign_product = (-1)^sum(current_column < 0);
-        source_LLR(i) = min_abs_val(i) * sign_product;
+        source_LLR(i) = min_abs_val * sign_product;
     end
-%     [~,min_source_idx] = min(abs(source_LLR));
 
     % decode source
     switch type_source
@@ -598,18 +510,14 @@ function [HR_X] = HR_decode(LLR,HR_struct,type_source,source_len)
     end
 
     % get section position
-    HR_X_xor_res_tmp = node_HR_xor_process(HR_X,source_len);
-    HR_X_xor_res = HR_X_xor_res_tmp & HR_struct;
-    section_number = get_section_number(min_idx_section,HR_X_xor_res,HR_struct);
-%     section_number_2 = get_section_number(second_min_idx_section,HR_X_xor_res,HR_struct);
-    [~,source_section_order] = sort(min_abs_val); 
-%     [~,source_section_order_2] = sort(second_abs_val);
-
+    HR_X_xor_res = node_HR_xor_process(HR_X,source_len);
+    section_position = section_flip_position(HR_struct,HR_X_xor_res);
+    sorted_rows = sort(section_position, 2);  % 每行按升序排序,找到排序后不重复的行索引,提取唯一行
+    [~, unique_idx] = unique(sorted_rows, 'rows');
+    section_position = section_position(sort(unique_idx), :);
 
     %S-PC filp
-    SPC_indices_1 = get_SPC_pair(source_len,min_idx_section, section_number,source_section_order);
-%     SPC_indices_2 = get_SPC_pair(source_len,second_min_idx_section,section_number_2,source_section_order_2);
-    SPC_indices = find_min_abs_sum_row(SPC_indices_1,LLR);
+    [~,SPC_indices] = findMinPair(LLR, source_len, section_position);
     if all(HR_struct==0) || all(HR_X_xor_res==0)
 %         HR_X = HR_X;
     else
@@ -622,114 +530,6 @@ function [HR_X] = HR_decode(LLR,HR_struct,type_source,source_len)
     end
     HR_X = HR_X';
         
-end
-
-
-function [result, counts] = xor_sum_segments(LLR, sou, position)
-    % 函数功能：
-    %   1. 将输入向量 LLR 按照 sou 向量的每一位进行分段（基于原始长度）。
-    %   2. 分段规则：对于 sou 的第 i 位，如果该位为 1，则将 LLR 分为 2^i 段；
-    %      如果该位为 0，则跳过该位，结果向量中对应位置为 0。
-    %   3. 对分好的段，按奇偶位置分为两组。
-    %   4. 逐元素异或：仅当一对元素在 position 中对应的位置都为 1 时，才进行异或。
-    %   5. 统计有效异或结果中 '1' 的总数，作为该位的 result。
-    %   6. 统计有效异或操作的总次数，作为该位的 counts。
-    %
-    % 输入参数：
-    %   LLR - 输入的二进制向量 (可以是数值向量或逻辑向量)。
-    %   sou - 一个由 0 和 1 组成的向量，定义了每一位的分段规则。
-    %   position - 一个与 LLR 等长的二进制向量，标记 LLR 中哪些位置的数据有效。
-    %
-    % 输出参数：
-    %   result - 一个与 sou 长度相同的向量，每个元素为对应位有效异或结果中'1'的总数。
-    %   counts - 一个与 sou 长度相同的向量，每个元素为对应位有效异或操作的次数。
-
-    % 检查输入是否为空
-    if isempty(LLR) || isempty(position)
-        result = zeros(size(sou));
-        counts = zeros(size(sou));
-        return;
-    end
-    
-    % 检查输入向量长度是否一致
-    if length(LLR) ~= length(position)
-        error('输入 LLR 和 position 的长度必须一致。');
-    end
-    
-    % 检查 sou 和 position 是否为 0-1 向量
-    if ~isvector(sou) || ~all(sou == 0 | sou == 1)
-        error('输入 sou 必须是一个由 0 和 1 组成的向量。');
-    end
-    if ~isvector(position) || ~all(position == 0 | position == 1)
-        error('输入 position 必须是一个由 0 和 1 组成的向量。');
-    end
-
-    len_LLR = length(LLR);
-    len_sou = length(sou);
-    result = zeros(1, len_sou);
-    counts = zeros(1, len_sou);
-    
-    % 遍历 sou 的每一位
-    for i = 1:len_sou
-        bit = sou(i);
-        
-        if bit == 1
-            num_segments = 2^i;
-            
-            % 检查原始 LLR 的长度是否能被分段数整除
-            if mod(len_LLR, num_segments) ~= 0
-                warning('LLR 的长度 (%d) 不能被 %d 整除，第 %d 位结果设为 0。', len_LLR, num_segments, i);
-                result(i) = 0;
-                counts(i) = 0;
-                continue;
-            end
-            
-            segment_length = len_LLR / num_segments;
-            
-            % 步骤 1: 按原始顺序分段
-            % segments 每行是一个段，元素在原始 LLR 中的位置是连续的
-            segments = reshape(LLR, segment_length, num_segments)';
-            
-            % 同样，为 position 也创建一个分段结构，用于快速检查有效性
-            position_segments = reshape(position, segment_length, num_segments)';
-            
-            % 步骤 2: 分组
-            K_odd = segments(1:2:end, :);   % 奇数段
-            K_eve = segments(2:2:end, :);   % 偶数段
-            
-            pos_K_odd = position_segments(1:2:end, :); % 奇数段的有效性掩码
-            pos_K_eve = position_segments(2:2:end, :); % 偶数段的有效性掩码
-            
-            % 检查两组数量是否相等
-            if size(K_odd, 1) ~= size(K_eve, 1)
-                warning('第 %d 位：段数 %d 为奇数，最后一个奇数段无法配对，结果设为 0。', i, num_segments);
-                result(i) = 0;
-                counts(i) = 0;
-                continue;
-            end
-            
-            % 步骤 3: 逐元素检查有效性并异或
-            % 创建一个逻辑矩阵，标记哪些位置的异或操作是有效的
-            valid_mask = pos_K_odd & pos_K_eve;
-            
-            % 执行异或操作（对所有位置，包括无效的）
-            xor_all = xor(K_odd, K_eve);
-            
-            % 只保留有效操作的异或结果
-            xor_valid = xor_all(valid_mask);
-            
-            % 步骤 4: 统计
-            % 有效异或结果中 '1' 的总数
-            result(i) = sum(xor_valid(:));
-            % 有效异或操作的次数
-            counts(i) = numel(xor_valid);
-            
-        else
-            % 如果 sou 的位为 0，结果和计数均设为 0
-            result(i) = 0;
-            counts(i) = 0;
-        end
-    end
 end
 
 
@@ -781,172 +581,107 @@ function out = node_HR_xor_process(a, len)
     end
 end
 
-function out = get_section_number(source_position, struct, mask)
-    % get_section_number 生成基于位置、结构和掩码的编码矩阵（保留向量反转）
-    %
-    % 输入:
-    %   source_position - 数值向量，原始位置索引
-    %   struct          - 二进制向量，用于异或操作的结构
-    %   mask            - 二进制向量，指示哪些位是固定的(1)或可变的(0)
-    %
-    % 输出:
-    %   out             - 数值矩阵，每行对应source_position一个元素的所有可能编码，
-    %                     空缺位置用NaN填充
-
-    % 将位置减一
-    pos = source_position - 1;
-    
-    % 保留原有的反转逻辑
-    mask_vec = mask(end:-1:1);
-    struct_vec = struct(end:-1:1);
-    
-    % 确定二进制位宽并校验输入维度
-    n = length(struct_vec);
-    if length(mask_vec) ~= n
-        error('struct 和 mask 必须具有相同的长度。');
+function [min_val, indices] = findMinPair(input, len, matrix)
+    % 输入检查
+    n = length(input);
+    if mod(n, len) ~= 0
+        error('输入向量input的长度必须能被len整除');
+    end
+    m = n / len;  % 段的总数量
+    [k, col] = size(matrix);
+   
+    if any(matrix(:) < 1) || any(matrix(:) > m)
+        error('matrix中的段号必须在有效范围内（1到%d）', m);
     end
     
-    % 初始化存储每个位置结果的元胞数组
-    out_cell = cell(length(pos), 1);
+    % 步骤1：将input划分为n/len段（每段长度为len）
+    segments = reshape(input, len, m)';  % 转换为m行len列的矩阵，每行代表一个段
     
-    for i = 1:length(pos)
-        % 将当前位置转换为n位二进制向量（确保高位在前，与dec2bin输出一致）
-        pos_binary_str = dec2bin(pos(i), n);
-        pos_binary = str2double(cellstr(pos_binary_str(:)));  % 转换为n×1向量
-        
-        % 计算固定位的值（mask为1的位强制固定，0的位保留为占位符）
-        fixed_bits = xor(pos_binary', struct_vec) .* mask_vec;
-        
-        % 找到可变位的索引（mask为0的位）
-        variable_indices = find(mask_vec == 0);
-        k = length(variable_indices);  % 可变位数量
-        
-        if k == 0
-            % 无可变位，仅一种组合
-            combined_binary = fixed_bits;  % 转为1×n行向量，便于后续处理
-        else
-            % 生成所有2^k种可变位组合（核心修复：确保维度正确）
-            num_combinations = 2^k;
-            % dec2bin生成num_combinations行×k列的字符矩阵（每行一个组合）
-            variable_combinations_str = dec2bin(0 : num_combinations - 1, k);
-            % 按行转换为数值矩阵（num_combinations行×k列），避免按列展开
-            variable_combinations = cellfun(@(row) str2double(cellstr(row(:)))', ...
-                                           mat2cell(variable_combinations_str, ones(num_combinations,1), k), ...
-                                           'UniformOutput', false);
-            variable_combinations = cell2mat(variable_combinations);  % 直接得到num_combinations×k矩阵
-            
-            % 初始化组合矩阵：num_combinations行×n列，填充固定位
-            combined_binary = repmat(fixed_bits, num_combinations, 1);
-            % 赋值可变位（variable_combinations为num_combinations×k，与目标列数匹配）
-            combined_binary(:, variable_indices) = variable_combinations;
+    % 步骤2：根据matrix计算对位绝对值相加结果及对应索引
+    num_values = k*len;  % 总共有km个数值
+    values = zeros(num_values, 1);      % 存储相加结果
+    indices = ones(num_values, 2);     % 存储每个结果对应的原始索引对
+    
+    current_idx = 1;  % 用于追踪当前存储位置
+    for i = 1:k
+        a = matrix(i, 1);  % 第一段号
+        b = matrix(i, 2);  % 第二段号
+        for j = 1:len
+            % 计算对位绝对值之和
+            values(current_idx) = abs(segments(a, j)) + abs(segments(b, j));
+            % 计算原始索引（MATLAB索引从1开始）
+            indices(current_idx, 1) = (a - 1) * len + j;  % 第一段中第j个元素的索引
+            indices(current_idx, 2) = (b - 1) * len + j;  % 第二段中第j个元素的索引
+            current_idx = current_idx + 1;
         end
-        
-        % 将二进制向量转换为十进制数（每行一个二进制数）
-        decimal_values = zeros(size(combined_binary, 1), 1);
-        for j = 1:size(combined_binary, 1)
-            % 拼接当前行的二进制位，去除空格
-            binary_str = strrep(num2str(combined_binary(j, :)), ' ', '');
-            decimal_values(j) = bin2dec(binary_str);
-        end
-        
-        % 加1后存入元胞数组（还原为原始位置索引逻辑）
-        out_cell{i} = decimal_values + 1;
-    end
-
-    % 构建输出矩阵（每行对应一个source_position元素，空缺填NaN）
-    if isempty(out_cell)
-        out = [];
-        return;
     end
     
-    num_rows = length(out_cell);
-    max_cols = max(cellfun(@length, out_cell));  % 最大列数（最多组合数）
-    out = NaN(num_rows, max_cols);  % 初始化输出矩阵
+    % 步骤3：找到最小值
+    min_val = min(values);
     
-    % 逐行填充结果
-    for i = 1:num_rows
-        out(i, 1:length(out_cell{i})) = out_cell{i};
-    end
-    
-    out = double(out);  % 确保输出为double类型
+    % 步骤4：找到最小值对应的索引对（若有多个最小值，取第一个）
+    min_pos = find(values == min_val, 1);
+    indices = indices(min_pos, :);
 end
 
-function out = get_SPC_pair(len, source_section, section_number, order)
-    % get_spc_pair 生成源段与目标段的索引对矩阵
-    %
-    % 输入:
-    %   len             - 标量，用于计算最终索引的长度值
-    %   source_section  - 向量，源段编号
-    %   section_number  - 矩阵，每行对应source_section一个元素的所有可能目标段编号
-    %   order           - 向量，指定处理source_section元素的顺序（元素为source_section的索引）
-    %
-    % 输出:
-    %   out             - 2列矩阵，每行是一个索引对 [源索引, 目标索引]
-
-    % 检查输入参数维度是否匹配
-    if length(source_section) ~= size(section_number, 1)
-        error('source_section 的长度必须与 section_number 的行数相同。');
-    end
+function result = section_flip_position(HR_struct,HR_X_xor_res)
+    % 初始化矩阵为[1, 1]
+    mat = [1, 1];
+    v = zeros(size(HR_X_xor_res));
     
-    % 计算输出矩阵的总行数
-    % 假设 section_number 矩阵中多余的元素用 NaN 填充
-    total_rows = 0;
-    for i = 1:size(section_number, 1)
-        % 计算每行中非 NaN 元素的数量
-        total_rows = total_rows + sum(~isnan(section_number(i, :)));
-    end
-    
-    % 初始化输出矩阵
-    out = zeros(total_rows, 2);
-    current_row = 1; % 跟踪当前填充到第几行
-    
-    % 按照 order 指定的顺序进行处理
-    for i = 1:length(order)
-        % 获取当前要处理的 source_section 的索引
-        idx = order(i);
-        
-        % 获取源段编号
-        a = source_section(idx);
-        
-        % 获取对应的所有可能目标段编号（排除 NaN）
-        section_row = section_number(idx, :);
-        valid_section_vals = section_row(~isnan(section_row));
-        
-        % 为每个有效的目标段编号生成一对索引
-        for j = 1:length(valid_section_vals)
-            section_val = valid_section_vals(j);
-            
-            % 计算索引对
-            pair_first = (a-1) * len + idx;
-            pair_second = (section_val-1) * len + idx;
-            
-            % 填充到输出矩阵
-            out(current_row, :) = [pair_first, pair_second];
-            
-            % 移动到下一行
-            current_row = current_row + 1;
+    % 根据a的值生成c
+    for i = 1:length(HR_X_xor_res)
+        if HR_struct(i) == 0
+            v(i) = -1;
+        else  % a(i) == 1
+            v(i) = HR_X_xor_res(i);
         end
     end
-end
-
-function min_row = find_min_abs_sum_row(matrix_2col, llr)
-    % find_min_abs_sum_row 计算2列矩阵每行对应向量元素的绝对值和，返回和最小的行
-    % 输入：
-    %   matrix_2col - 2列数值矩阵（每行两个元素作为llr的索引，索引需为正整数）
-    %   llr         - 数值向量（长度需大于矩阵中所有索引值）
-    % 输出：
-    %   min_row     - 和最小的一行（2元素向量）
     
-    % 提取矩阵两列作为索引（确保索引为整数）
-    idx1 = matrix_2col(:, 1);
-    idx2 = matrix_2col(:, 2);
+    % 遍历输入向量的每个元素
+    for i = 1:length(v)
+        elem = v(i);
+        current_rows = size(mat, 1);
+        new_mat = [];  % 存储扩展后的矩阵
+        delta = 2^(i-1);  % 增量为2^(i-1)（关键修正）
+        
+        % 根据当前元素值进行扩展
+        for row = 1:current_rows
+            a = mat(row, 1);
+            b = mat(row, 2);
+            
+            switch elem
+                case -1
+                    % 扩展为4行
+                    new_rows = [
+                        a, b;
+                        a + delta, b;
+                        a, b + delta;
+                        a + delta, b + delta
+                    ];
+                case 0
+                    % 扩展为2行
+                    new_rows = [
+                        a, b;
+                        a + delta, b + delta
+                    ];
+                case 1
+                    % 扩展为2行
+                    new_rows = [
+                        a + delta, b;
+                        a, b + delta
+                    ];
+                otherwise
+                    error('输入向量元素必须为-1、0或1');
+            end
+            
+            new_mat = [new_mat; new_rows];  % 拼接扩展后的行
+        end
+        
+        mat = new_mat;  % 更新矩阵为扩展后的结果
+    end
     
-    % 计算每行对应llr元素的绝对值和（核心逻辑）
-    abs_sum = abs(llr(idx1)) + abs(llr(idx2));
-    
-    % 找到绝对值和最小的索引，返回对应行
-    [~, min_idx] = min(abs_sum);
-    min_row = matrix_2col(min_idx, :);
+    result = mat;
 end
 
 function C = kroneckerSumSequence(A)
@@ -977,7 +712,7 @@ function C = kroneckerSumSequence(A)
         C = cell2mat(C');  % 转换为行向量
         C = reshape(C.',[],1);
     end
-end
+                                                      end
 
 function C = funcGG(A, B)
     % 检查输入有效性
@@ -1048,9 +783,6 @@ function [llr_out] = pe(f_g, num, llr_in, bit_in)
         % g-PE: 结合译码比特
         u = bit_in(:); % 保证列向量
         llr_out = (1 - 2 * u) .* a + b;
-        %限位
-        llr_out(llr_out > 127) = 127;
-        llr_out(llr_out < -127) = -127;
         % 定点量化
         %llr_out = arrayfun(@(x) quantize(x, width_llr, frac_llr), llr_out); % -512 ~ 511
     end

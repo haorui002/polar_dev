@@ -23,10 +23,6 @@ end
 
 function [SR_struct, HR_struct, code_struct, cnt_struct] = identify_node(idx_fzn, idx, code_struct, cnt_struct,SR_struct, HR_struct,source_len)
     N = length(idx_fzn);
-    if N > 256
-        [SR_struct, HR_struct, code_struct, cnt_struct] = identify_node(idx_fzn(1 : N/2), idx(1 : N/2) ,code_struct, cnt_struct,SR_struct, HR_struct,source_len);
-        [SR_struct, HR_struct, code_struct, cnt_struct] = identify_node(idx_fzn(N/2 + 1 : end), idx(N/2 + 1 : end),code_struct, cnt_struct,SR_struct, HR_struct,source_len);
-    else 
         if is_segment_SR(idx_fzn,source_len)
             [~,SR_struct{cnt_struct},type_source] = is_segment_SR(idx_fzn,source_len);
             code_struct(cnt_struct, :) = [idx(1), N, 1,type_source];
@@ -42,7 +38,6 @@ function [SR_struct, HR_struct, code_struct, cnt_struct] = identify_node(idx_fzn
             code_struct(cnt_struct, :) = [idx(1), N, 5];
             cnt_struct = cnt_struct + 1;
         end
-    end
 end
     
 
@@ -431,9 +426,9 @@ function [SR_X] = SR_decode(LLR,SR_struct,type_source,source_len,mean_value)
     path_esti(max_index_in_path) = 1 - path_esti(max_index_in_path);
 
 %     key_position = ones_pos(max_index_in_path);
-    if path_esti_metric(max_index_in_path) > bound_LLR(max_index_in_path)  && k>5
+    if path_esti_metric(max_index_in_path) > bound_LLR(max_index_in_path)  && k>3
         rows_to_keep = sequences(:, max_index_in_path) == 1;
-    elseif                        k>5
+    elseif                        k>3
         rows_to_keep = sequences(:, max_index_in_path) == 0;
     else
         rows_to_keep = true(num_sequences, 1); 
@@ -598,8 +593,7 @@ function [HR_X] = HR_decode(LLR,HR_struct,type_source,source_len)
     end
 
     % get section position
-    HR_X_xor_res_tmp = node_HR_xor_process(HR_X,source_len);
-    HR_X_xor_res = HR_X_xor_res_tmp & HR_struct;
+    HR_X_xor_res = node_HR_xor_process(HR_X,source_len);
     section_number = get_section_number(min_idx_section,HR_X_xor_res,HR_struct);
 %     section_number_2 = get_section_number(second_min_idx_section,HR_X_xor_res,HR_struct);
     [~,source_section_order] = sort(min_abs_val); 
@@ -1043,14 +1037,11 @@ function [llr_out] = pe(f_g, num, llr_in, bit_in)
     
     if f_g == 0
         % f-PE: min-sum近似
-        llr_out =  sign(a) .* sign(b) .* min(abs(a), abs(b));
+        llr_out = 0.9375 * sign(a) .* sign(b) .* min(abs(a), abs(b));
     else
         % g-PE: 结合译码比特
         u = bit_in(:); % 保证列向量
         llr_out = (1 - 2 * u) .* a + b;
-        %限位
-        llr_out(llr_out > 127) = 127;
-        llr_out(llr_out < -127) = -127;
         % 定点量化
         %llr_out = arrayfun(@(x) quantize(x, width_llr, frac_llr), llr_out); % -512 ~ 511
     end

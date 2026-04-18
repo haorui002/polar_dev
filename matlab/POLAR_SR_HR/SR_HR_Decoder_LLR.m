@@ -23,6 +23,10 @@ end
 
 function [SR_struct, HR_struct, code_struct, cnt_struct] = identify_node(idx_fzn, idx, code_struct, cnt_struct,SR_struct, HR_struct,source_len)
     N = length(idx_fzn);
+    if N > 256
+        [SR_struct, HR_struct, code_struct, cnt_struct] = identify_node(idx_fzn(1 : N/2), idx(1 : N/2) ,code_struct, cnt_struct,SR_struct, HR_struct,source_len);
+        [SR_struct, HR_struct, code_struct, cnt_struct] = identify_node(idx_fzn(N/2 + 1 : end), idx(N/2 + 1 : end),code_struct, cnt_struct,SR_struct, HR_struct,source_len);
+    else 
         if is_segment_SR(idx_fzn,source_len)
             [~,SR_struct{cnt_struct},type_source] = is_segment_SR(idx_fzn,source_len);
             code_struct(cnt_struct, :) = [idx(1), N, 1,type_source];
@@ -38,6 +42,7 @@ function [SR_struct, HR_struct, code_struct, cnt_struct] = identify_node(idx_fzn
             code_struct(cnt_struct, :) = [idx(1), N, 5];
             cnt_struct = cnt_struct + 1;
         end
+    end
 end
     
 
@@ -707,7 +712,7 @@ function C = kroneckerSumSequence(A)
         C = cell2mat(C');  % 转换为行向量
         C = reshape(C.',[],1);
     end
-end
+                                                      end
 
 function C = funcGG(A, B)
     % 检查输入有效性
@@ -773,11 +778,14 @@ function [llr_out] = pe(f_g, num, llr_in, bit_in)
     
     if f_g == 0
         % f-PE: min-sum近似
-        llr_out = 0.9375 * sign(a) .* sign(b) .* min(abs(a), abs(b));
+        llr_out =  sign(a) .* sign(b) .* min(abs(a), abs(b));
     else
         % g-PE: 结合译码比特
         u = bit_in(:); % 保证列向量
         llr_out = (1 - 2 * u) .* a + b;
+        %限位
+        llr_out(llr_out > 127) = 127;
+        llr_out(llr_out < -127) = -127;
         % 定点量化
         %llr_out = arrayfun(@(x) quantize(x, width_llr, frac_llr), llr_out); % -512 ~ 511
     end

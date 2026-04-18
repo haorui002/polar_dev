@@ -4,14 +4,15 @@ addpath('Decoding_Index/')
 addpath('GA/')
 load('WQ_LIST_4096');
 load('WQ_LIST_1024');
-WQ_LIST = WQ_LIST_1024;
-% WQ_LIST = WQ_LIST_4096;
+% WQ_LIST = WQ_LIST_1024;
+WQ_LIST = WQ_LIST_4096;
 
 %% 配置仿真基本信息：码长，码率，最大仿真循环次数，打印信息频率，信噪比范围。
-n = 10;
+n = 12;
 N = 2^n;
 % k_list = [ 3/8 , 1/2 , 5/8 , 3/4];
-k_list = [   6/8];
+d_list = 0.2 : 0.05 : 0.8;
+k_list = [   1/2];
 K_list = N*k_list;
 bp_max_iter = 10;
 max_runs = 10000;
@@ -49,7 +50,7 @@ for i = 1 : length(K_list)
         end
     
     %% 生成源码序列 u
-    %  rng(7);
+     rng(9);
     info = randi([0 1], K, 1);
     
     %% 码字构造
@@ -59,17 +60,18 @@ for i = 1 : length(K_list)
             temp_num_runs(i_ebno, :) = temp_num_runs(i_ebno, :) + 1;  % 修改：更新临时统计数组
              
     %% 一次循环的一个信噪比，过信道
-            llr = data_link(enc_out, ebno_vec(i_ebno), K/N);
+%              llr = data_link(enc_out, ebno_vec(i_ebno), K/N);
+             llr = randi([-127, 127], 1, 4096) ;
     
     %% 八种译码方法
-            [info_esti_bp, ~, ~, ~] = BP_Decoder_LLR(info_bits, frozen_bits, llr', bp_max_iter, M_up, M_down);
-            [info_esti_ssc] = SSC_Decoder_LLR(N, K, llr, WQ_LIST);
-            [info_esti_sr_hr] = SR_HR_Decoder_LLR(N, K, llr, WQ_LIST);
+%             [info_esti_bp, ~, ~, ~] = BP_Decoder_LLR(info_bits, frozen_bits, llr', bp_max_iter, M_up, M_down);
+%             [info_esti_ssc] = SSC_Decoder_LLR(N, K, llr, WQ_LIST);
+%             [info_esti_sr_hr] = SR_HR_Decoder_LLR(N, K, llr, WQ_LIST);
             [info_esti_my_sr_hr] = My_SR_HR_Decoder(N, K, llr, WQ_LIST);
-            [info_esti_sr_only] = SR_Only_Decoder(N, K, llr, WQ_LIST);
-            [info_esti_my_sr] = My_SR_Decoder(N, K, llr, WQ_LIST);
-            [info_esti_hr_only] = HR_Only_Decoder(N, K, llr, WQ_LIST);
-            [info_esti_my_hr] = My_HR_Decoder(N, K, llr, WQ_LIST);
+%             [info_esti_sr_only] = SR_Only_Decoder(N, K, llr, WQ_LIST);
+%             [info_esti_my_sr] = My_SR_Decoder(N, K, llr, WQ_LIST,dddd);
+%             [info_esti_hr_only] = HR_Only_Decoder(N, K, llr, WQ_LIST);
+%             [info_esti_my_hr] = My_HR_Decoder(N, K, llr, WQ_LIST);
 
             
     %% 计算误块率，误码率        

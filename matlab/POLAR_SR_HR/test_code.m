@@ -1,131 +1,131 @@
 % 
 % 示例输入向量（仅包含0和1）
 LLR = randi([0,1],1,16);
-v = [1, 0,1,0];  % 可替换为任意0-1向量
+v = [1];  % 可替换为任意0-1向量
 
-% % 找出值为1的位置
-% ones_pos = find(v == 1);
-% k = length(ones_pos);  % 1的个数
+% % % 找出值为1的位置
+% % ones_pos = find(v == 1);
+% % k = length(ones_pos);  % 1的个数
+% % 
+% % % 生成所有可能的0-1组合（共2^k种）
+% % combinations = dec2bin(0:2^k-1, k) - '0';  % 转换为数值矩阵
+% % 
+% % % 生成所有可能的序列
+% % num_sequences = size(combinations, 1);
+% % sequences = repmat(v, num_sequences, 1);  % 初始化序列矩阵
+% % SR_path = [];
+% % source_LLR = [];
+% % % 填充所有组合
+% % for i = 1:num_sequences
+% %     sequences(i, ones_pos) = combinations(i, :);
+% %     SR_path(i,:) = kroneckerSumSequence(sequences(i,:));
+% %     source_LLR(i,:) = generateC(LLR,SR_path(i,:));
+% % end
+% % 
+% % result = findMaxAbsRow(source_LLR);
+% % 
+% % 
+% % 
+% source_LLR = get_section_number([4,7],[1,1,0],[0,1,1]);
+% % % 显示结果
+% % disp('所有可能的序列：');
+% % disp(sequences);
+% % disp('所有path：');
+% % disp(SR_path);
+% disp('LLR:');
+% disp(LLR);
+% disp('源节点LLR：');
+% disp(source_LLR);
 % 
-% % 生成所有可能的0-1组合（共2^k种）
-% combinations = dec2bin(0:2^k-1, k) - '0';  % 转换为数值矩阵
+% function out = get_section_number(source_position, struct, mask)
+%     % get_section_number 生成基于位置、结构和掩码的编码矩阵（保留向量反转）
+%     %
+%     % 输入:
+%     %   source_position - 数值向量，原始位置索引
+%     %   struct          - 二进制向量，用于异或操作的结构
+%     %   mask            - 二进制向量，指示哪些位是固定的(1)或可变的(0)
+%     %
+%     % 输出:
+%     %   out             - 数值矩阵，每行对应source_position一个元素的所有可能编码，
+%     %                     空缺位置用NaN填充
 % 
-% % 生成所有可能的序列
-% num_sequences = size(combinations, 1);
-% sequences = repmat(v, num_sequences, 1);  % 初始化序列矩阵
-% SR_path = [];
-% source_LLR = [];
-% % 填充所有组合
-% for i = 1:num_sequences
-%     sequences(i, ones_pos) = combinations(i, :);
-%     SR_path(i,:) = kroneckerSumSequence(sequences(i,:));
-%     source_LLR(i,:) = generateC(LLR,SR_path(i,:));
+%     % 将位置减一
+%     pos = source_position - 1;
+%     
+%     % 保留原有的反转逻辑
+%     mask_vec = mask(end:-1:1);
+%     struct_vec = struct(end:-1:1);
+%     
+%     % 确定二进制位宽并校验输入维度
+%     n = length(struct_vec);
+%     if length(mask_vec) ~= n
+%         error('struct 和 mask 必须具有相同的长度。');
+%     end
+%     
+%     % 初始化存储每个位置结果的元胞数组
+%     out_cell = cell(length(pos), 1);
+%     
+%     for i = 1:length(pos)
+%         % 将当前位置转换为n位二进制向量（确保高位在前，与dec2bin输出一致）
+%         pos_binary_str = dec2bin(pos(i), n);
+%         pos_binary = str2double(cellstr(pos_binary_str(:)));  % 转换为n×1向量
+%         
+%         % 计算固定位的值（mask为1的位强制固定，0的位保留为占位符）
+%         fixed_bits = xor(pos_binary', struct_vec) .* mask_vec;
+%         
+%         % 找到可变位的索引（mask为0的位）
+%         variable_indices = find(mask_vec == 0);
+%         k = length(variable_indices);  % 可变位数量
+%         
+%         if k == 0
+%             % 无可变位，仅一种组合
+%             combined_binary = fixed_bits;  % 转为1×n行向量，便于后续处理
+%         else
+%             % 生成所有2^k种可变位组合（核心修复：确保维度正确）
+%             num_combinations = 2^k;
+%             % dec2bin生成num_combinations行×k列的字符矩阵（每行一个组合）
+%             variable_combinations_str = dec2bin(0 : num_combinations - 1, k);
+%             % 按行转换为数值矩阵（num_combinations行×k列），避免按列展开
+%             variable_combinations = cellfun(@(row) str2double(cellstr(row(:))), ...
+%                                            mat2cell(variable_combinations_str, ones(num_combinations,1), k), ...
+%                                            'UniformOutput', false);
+%             variable_combinations = cell2mat(variable_combinations);  % 直接得到num_combinations×k矩阵
+%             
+%             % 初始化组合矩阵：num_combinations行×n列，填充固定位
+%             combined_binary = repmat(fixed_bits, num_combinations, 1);
+%             % 赋值可变位（variable_combinations为num_combinations×k，与目标列数匹配）
+%             combined_binary(:, variable_indices) = variable_combinations;
+%         end
+%         
+%         % 将二进制向量转换为十进制数（每行一个二进制数）
+%         decimal_values = zeros(size(combined_binary, 1), 1);
+%         for j = 1:size(combined_binary, 1)
+%             % 拼接当前行的二进制位，去除空格
+%             binary_str = strrep(num2str(combined_binary(j, :)), ' ', '');
+%             decimal_values(j) = bin2dec(binary_str);
+%         end
+%         
+%         % 加1后存入元胞数组（还原为原始位置索引逻辑）
+%         out_cell{i} = decimal_values + 1;
+%     end
+% 
+%     % 构建输出矩阵（每行对应一个source_position元素，空缺填NaN）
+%     if isempty(out_cell)
+%         out = [];
+%         return;
+%     end
+%     
+%     num_rows = length(out_cell);
+%     max_cols = max(cellfun(@length, out_cell));  % 最大列数（最多组合数）
+%     out = NaN(num_rows, max_cols);  % 初始化输出矩阵
+%     
+%     % 逐行填充结果
+%     for i = 1:num_rows
+%         out(i, 1:length(out_cell{i})) = out_cell{i};
+%     end
+%     
+%     out = double(out);  % 确保输出为double类型
 % end
-% 
-% result = findMaxAbsRow(source_LLR);
-% 
-% 
-% 
-source_LLR = get_section_number([4,7],[1,1,0],[0,1,1]);
-% % 显示结果
-% disp('所有可能的序列：');
-% disp(sequences);
-% disp('所有path：');
-% disp(SR_path);
-disp('LLR:');
-disp(LLR);
-disp('源节点LLR：');
-disp(source_LLR);
-
-function out = get_section_number(source_position, struct, mask)
-    % get_section_number 生成基于位置、结构和掩码的编码矩阵（保留向量反转）
-    %
-    % 输入:
-    %   source_position - 数值向量，原始位置索引
-    %   struct          - 二进制向量，用于异或操作的结构
-    %   mask            - 二进制向量，指示哪些位是固定的(1)或可变的(0)
-    %
-    % 输出:
-    %   out             - 数值矩阵，每行对应source_position一个元素的所有可能编码，
-    %                     空缺位置用NaN填充
-
-    % 将位置减一
-    pos = source_position - 1;
-    
-    % 保留原有的反转逻辑
-    mask_vec = mask(end:-1:1);
-    struct_vec = struct(end:-1:1);
-    
-    % 确定二进制位宽并校验输入维度
-    n = length(struct_vec);
-    if length(mask_vec) ~= n
-        error('struct 和 mask 必须具有相同的长度。');
-    end
-    
-    % 初始化存储每个位置结果的元胞数组
-    out_cell = cell(length(pos), 1);
-    
-    for i = 1:length(pos)
-        % 将当前位置转换为n位二进制向量（确保高位在前，与dec2bin输出一致）
-        pos_binary_str = dec2bin(pos(i), n);
-        pos_binary = str2double(cellstr(pos_binary_str(:)));  % 转换为n×1向量
-        
-        % 计算固定位的值（mask为1的位强制固定，0的位保留为占位符）
-        fixed_bits = xor(pos_binary', struct_vec) .* mask_vec;
-        
-        % 找到可变位的索引（mask为0的位）
-        variable_indices = find(mask_vec == 0);
-        k = length(variable_indices);  % 可变位数量
-        
-        if k == 0
-            % 无可变位，仅一种组合
-            combined_binary = fixed_bits;  % 转为1×n行向量，便于后续处理
-        else
-            % 生成所有2^k种可变位组合（核心修复：确保维度正确）
-            num_combinations = 2^k;
-            % dec2bin生成num_combinations行×k列的字符矩阵（每行一个组合）
-            variable_combinations_str = dec2bin(0 : num_combinations - 1, k);
-            % 按行转换为数值矩阵（num_combinations行×k列），避免按列展开
-            variable_combinations = cellfun(@(row) str2double(cellstr(row(:))), ...
-                                           mat2cell(variable_combinations_str, ones(num_combinations,1), k), ...
-                                           'UniformOutput', false);
-            variable_combinations = cell2mat(variable_combinations);  % 直接得到num_combinations×k矩阵
-            
-            % 初始化组合矩阵：num_combinations行×n列，填充固定位
-            combined_binary = repmat(fixed_bits, num_combinations, 1);
-            % 赋值可变位（variable_combinations为num_combinations×k，与目标列数匹配）
-            combined_binary(:, variable_indices) = variable_combinations;
-        end
-        
-        % 将二进制向量转换为十进制数（每行一个二进制数）
-        decimal_values = zeros(size(combined_binary, 1), 1);
-        for j = 1:size(combined_binary, 1)
-            % 拼接当前行的二进制位，去除空格
-            binary_str = strrep(num2str(combined_binary(j, :)), ' ', '');
-            decimal_values(j) = bin2dec(binary_str);
-        end
-        
-        % 加1后存入元胞数组（还原为原始位置索引逻辑）
-        out_cell{i} = decimal_values + 1;
-    end
-
-    % 构建输出矩阵（每行对应一个source_position元素，空缺填NaN）
-    if isempty(out_cell)
-        out = [];
-        return;
-    end
-    
-    num_rows = length(out_cell);
-    max_cols = max(cellfun(@length, out_cell));  % 最大列数（最多组合数）
-    out = NaN(num_rows, max_cols);  % 初始化输出矩阵
-    
-    % 逐行填充结果
-    for i = 1:num_rows
-        out(i, 1:length(out_cell{i})) = out_cell{i};
-    end
-    
-    out = double(out);  % 确保输出为double类型
-end
 
 % function count_ones = xor_count_skip_segments(LLR, seg, len)
 %     % 函数功能：
@@ -266,37 +266,37 @@ end
 
 % disp('绝对值之和最大的行是：');
 % disp(result);
-
-
-% function C = kroneckerSumSequence(A)
-%     % 输入：0/1序列A
-%     % 输出：所有二元组依次做克罗内克和的结果C
-%     
-%     % 步骤1：生成二元组序列B
-%     B = cell(size(A));
-%     for i = 1:length(A)
-%         if A(i) == 1
-%             B{i} = [1, 0];  % 1对应(1,0)
-%         else
-%             B{i} = [0, 0];  % 0对应(0,0)
-%         end
-%     end
-%     
-%     % 步骤2：依次计算克罗内克和（#操作）
-%     % 初始值为第一个二元组
-%     C = B{1};
-%     % 从第二个元素开始迭代计算
-%     for i = 2:length(B)
-%         % 取出当前两个待运算的向量
-%         X = C;
-%         Y = B{i};
-%         % 克罗内克和：X中每个元素分别与Y中每个元素相加，生成新向量
-%         % 例如(1,0)#(1,0) = [1+1, 1+0, 0+1, 0+0] = [2,1,1,0]
-%         C = arrayfun(@(x) mod((x + Y),2), X, 'UniformOutput', false);
-%         C = cell2mat(C');  % 转换为行向量
-%         C = reshape(C.',[],1)
-%     end
-% end
+X=kroneckerSumSequence(v)
+uu = funcGG([1,2,3,4,5,6,7,8],X)
+function C = kroneckerSumSequence(A)
+    % 输入：0/1序列A
+    % 输出：所有二元组依次做克罗内克和的结果C
+    
+    % 步骤1：生成二元组序列B
+    B = cell(size(A));
+    for i = 1:length(A)
+        if A(i) == 1
+            B{i} = [1, 0];  % 1对应(1,0)
+        else
+            B{i} = [0, 0];  % 0对应(0,0)
+        end
+    end
+    
+    % 步骤2：依次计算克罗内克和（#操作）
+    % 初始值为第一个二元组
+    C = B{1};
+    % 从第二个元素开始迭代计算
+    for i = 2:length(B)
+        % 取出当前两个待运算的向量
+        X = C;
+        Y = B{i};
+        % 克罗内克和：X中每个元素分别与Y中每个元素相加，生成新向量
+        % 例如(1,0)#(1,0) = [1+1, 1+0, 0+1, 0+0] = [2,1,1,0]
+        C = arrayfun(@(x) mod((x + Y),2), X, 'UniformOutput', false);
+        C = cell2mat(C');  % 转换为行向量
+        C = reshape(C.',[],1)
+    end
+end
 % 
 % function C = generateC(A, B)
 %     % 检查输入有效性
@@ -401,6 +401,33 @@ end
 %     end
 % end
 
+
+function C = funcGG(A, B)
+    % 检查输入有效性
+    M = length(A);
+    N = length(B);
+    if mod(M, N) ~= 0
+        error('A的长度必须是B长度的正整数倍');
+    end
+    K = M / N;  % C的长度
+    
+    % 将A按列分为N组（每组K个元素）
+    A_matrix = reshape(A, K, N);  % K行N列矩阵，每列对应一组
+    
+    % 计算C：每组按B的符号运算（B=0为加，B=1为减）
+    C = zeros(1, K);
+    for k = 1:K  % 遍历C的每个位置
+        sum_val = 0;
+        for n = 1:N  % 遍历每组
+            if B(n) == 0
+                sum_val = sum_val + A_matrix(k, n);  % 加第n组的第k个元素
+            else
+                sum_val = sum_val - A_matrix(k, n);  % 减第n组的第k个元素
+            end
+        end
+        C(k) = sum_val;
+    end
+end
 
 % function [SR_X] = SR_decode(LLR,SR_struct,type_source,source_len)
 %     % 示例输入向量（仅包含0和1）
